@@ -26,7 +26,7 @@ def main():
 
     # define learning problem
     # dataset = binary_data()
-    dataset = n_ary_data(n=input_size, connective=OR)
+    dataset = n_ary_data(n=input_size, connective=XOR)
 
     # initialize network and parameters
     net = SignalTree(input_size=input_size)
