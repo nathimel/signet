@@ -1,3 +1,4 @@
+import random
 import numpy as np
 from agents import SignalingModule, InputSender, HiddenSignaler, OutputReceiver
 from languages import State
@@ -137,7 +138,9 @@ def empirical_accuracy(
     for _ in range(num_rounds):
         example = np.random.choice(dataset)
 
-        x = example["input"]
+        x = list(example["input"]) # copy and shuffle order
+        random.shuffle(x)
+
         y = example["label"]
         y_hat = net(x)
 

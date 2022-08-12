@@ -1,6 +1,7 @@
 import util
 import vis
 import sys
+import random
 import numpy as np
 from network import SignalTree, empirical_accuracy
 from tqdm import tqdm
@@ -25,7 +26,7 @@ def main():
 
     # define learning problem
     # dataset = binary_data()
-    dataset = n_ary_data(n=input_size, connective=AND)
+    dataset = n_ary_data(n=input_size, connective=OR)
 
     # initialize network and parameters
     net = SignalTree(input_size=input_size)
@@ -34,7 +35,10 @@ def main():
     # main training loop
     for r in tqdm(range(num_rounds)):
         example = np.random.choice(dataset)
-        x = example["input"]
+
+        x = list(example["input"]) # copy and shuffle order
+        random.shuffle(x)
+
         y = example["label"]
         y_hat = net(x)
 
