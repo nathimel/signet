@@ -26,7 +26,16 @@ def XOR(x: bool, y: bool) -> bool:
 def NAND(x: bool, y: bool) -> bool:
     return not (x and y)
 
+def IMPLIES(x: bool, y: bool) -> bool:
+    return not x or y
+
+def IFF(x: bool, y: bool) -> bool:
+    return x == y
+
 # Utility functions
+
+def bool_to_state(x: bool) -> State:
+    return State(str(int(x)))
 
 def generate_data(sentence: str = "p and q") -> list[dict[str, State]]:
     """Given a boolean function, generate a dataset of positive examples to train agents on corresponding to the table representation of the function.
@@ -60,12 +69,12 @@ def n_ary_data(
     f = lambda inputs: reduce(connective, inputs)
     examples = []
     assignments = list(
-        product([0, 1], repeat=n)
+        product([False, True], repeat=n)
     )  # get all possible combinations of truth values
     for inputs in assignments:
         example = {
-            "input": [State(str(atom)) for atom in inputs],  # a list of states
-            "label": State(str(f(inputs))),  # a state
+            "input": [bool_to_state(atom) for atom in inputs],  # a list of states
+            "label": bool_to_state(f(inputs)),  # a state
         }
         examples.append(example)
     return examples

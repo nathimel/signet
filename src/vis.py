@@ -16,7 +16,7 @@ def plot_accuracy(fn: str, accuracies: list[float]) -> None:
         pn.ggplot(data=data, mapping=pn.aes(x="round", y="accuracy"))
         + pn.geom_line(size=1, data=data)
         + pn.ylim(0, 1)
-        + pn.xlab("Epochs")
+        + pn.xlab("Rounds")
         + pn.ylab("Accuracy")
         + pn.scale_color_cmap("cividis")
     )
