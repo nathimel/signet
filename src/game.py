@@ -22,6 +22,7 @@ from functools import reduce
 # Data and evaluation
 ##############################################################################
 
+
 def generate_data(sentence: str = "p and q") -> list[dict[str, State]]:
     """Given a boolean function, generate a dataset of positive examples to train agents on corresponding to the table representation of the function.
 
@@ -50,14 +51,17 @@ def generate_data(sentence: str = "p and q") -> list[dict[str, State]]:
 def n_ary_data(n: int):
     f = lambda inputs: reduce(lambda x, y: x and y, inputs)
     examples = []
-    assignments = list(product([0, 1], repeat=n)) # get all possible combinations of truth values
+    assignments = list(
+        product([0, 1], repeat=n)
+    )  # get all possible combinations of truth values
     for inputs in assignments:
         example = {
             "input": [State(str(atom)) for atom in inputs],  # a list of states
             "label": State(str(f(inputs))),  # a state
         }
         examples.append(example)
-    return examples    
+    return examples
+
 
 def binary_data(
     f: Callable[[bool, bool], bool] = lambda x, y: x and y
@@ -81,7 +85,7 @@ def binary_data(
 
 
 def empirical_accuracy(
-    net: SignalTree, dataset: list[dict[str, Any]], num_rounds: int = 100
+    net: SignalTree, dataset: list[dict[str, Any]], num_rounds: int = None
 ) -> float:
     """
     Evaluate the accuracy of a signaling networks by computing the average accuracy on the dataset.
@@ -89,6 +93,9 @@ def empirical_accuracy(
     Args:
         num_rounds: an int representing how many interactions to record.
     """
+    if num_rounds is None:
+        num_rounds = len(dataset)
+
     num_correct = 0
     for _ in range(num_rounds):
         example = np.random.choice(dataset)
@@ -98,6 +105,7 @@ def empirical_accuracy(
         y_hat = net(x)
 
         num_correct += 1 if y_hat == y else 0
+        net.update()
 
     return num_correct / num_rounds
 
@@ -129,6 +137,7 @@ def get_binary_language() -> SignalingLanguage:
         signals=signals,
     )
 
+
 def get_quaternary_language() -> SignalingLanguage:
     """Get a 2 state, 4 signal SignalingLanguage instance initialized for boolean games."""
     states = [State(name="0"), State(name="1")]
@@ -146,15 +155,18 @@ def get_quaternary_language() -> SignalingLanguage:
 
     return SignalingLanguage(
         signals=signals,
-    )    
+    )
+
 
 def get_sender() -> SenderModule:
     """Get a 2 state, 2 signal SenderModule instance initialized for boolean games."""
     return SenderModule(sender=Sender(language=get_binary_language()))
 
+
 def get_receiver() -> ReceiverModule:
     """Get a ReceiverModule instance initialized for boolean games."""
     return ReceiverModule(receiver=Receiver(language=get_binary_language()))
+
 
 def get_quaternary_receiver() -> SenderModule:
     """Get a 4 signal, 2 state ReceiverModule instsance initialized for boolean games."""
@@ -167,6 +179,7 @@ def get_receiver_sender() -> ReceiverSender:
         receiver=get_quaternary_receiver(),
         sender=get_sender(),
     )
+
 
 def get_compressor(input_size: int) -> Compressor:
     """Get a Compressor instance initialized for boolean games."""

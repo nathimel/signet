@@ -16,43 +16,64 @@ class SignalTree(SignalingModule):
 
     def __init__(self, input_size: int) -> None:
         # initialize layers
-        self.layers = build_triangle_network(input_size)
+        self.agents = build_triangle_network(input_size)
 
         # wrap each layer of agents as a function
-        self.input_layer = lambda x: [agent(x) for agent in self.layers["input"]]
+        self.input_layer = Layer(self.agents["input"])
+        self.hidden_layers = None
+        if self.agents["hidden"]:
+            self.hidden_layers = Sequential(
+                Layer(layer) for layer in self.agents["hidden"]
+            )
+        (self.output_layer,) = self.agents["output"]
 
-        if self.layers["hidden"]:
-            self.hidden_layers = lambda x: sequential(self.layers["hidden"], x)
+        self.all_layers = Sequential(
+            [
+                layer
+                for layer in [self.input_layer, self.hidden_layers, self.output_layer]
+                if layer is not None
+            ]
+        )
 
-        self.output_layer = lambda x: self.layers["output"][0](x)
+        super().__init__()
 
     def forward(self, x: list[State]) -> State:
         x_hat = self.input_layer(x)
-        if self.layers["hidden"]:
+        if self.agents["hidden"]:
             x_hat = self.hidden_layers(x_hat)
-        output = self.output_layer(x_hat)
-        return output
+        return self.output_layer(x_hat)
 
-    def reward(self, amount: float) -> None:
-        [
-            agent.reward(amount)
-            for layer in [self.layers["input"]] + self.layers["hidden"] + [self.layers["output"]] for agent in layer
-        ]
-    
-    def punish(self, amount: float) -> None:
-        [
-            agent.punish(amount)
-            for layer in [self.layers["input"]] + self.layers["hidden"] + [self.layers["output"]] for agent in layer
-        ]        
+    def update(self, reward_amount: float = 0) -> None:
+        self.input_layer.update(reward_amount)
+        self.output_layer.update(reward_amount)
 
 
-def sequential(
-    layers: list[list[SignalingModule]], input_signals: list[Signal]
-) -> Callable[[list[Any]], list[Any]]:
-    """Converts a list of layers to a function reducing the result of each applied in order."""
-    funcs = [lambda x: [agent(x) for agent in layer] for layer in layers]
-    result = reduce(lambda res, f: f(res), funcs, input_signals)
-    return result
+class Layer(SignalingModule):
+    def __init__(self, agents: list[SignalingModule]) -> None:
+        self.agents = agents
+
+    def forward(self, x) -> Any:
+        return [agent(x) for agent in self.agents]
+
+    def update(self, reward_amount: float = 0) -> None:
+        [agent.update(reward_amount) for agent in self.agents]
+
+
+class Sequential(SignalingModule):
+    """Constructs a module consisting of the result of a list of layers applied to each other in order using `reduce`."""
+
+    def __init__(self, layers: list[Layer]) -> None:
+        self.layers = layers
+
+    def forward(self, x) -> Any:
+        return reduce(
+            lambda res, f: f(res),
+            [lambda x_: layer(x_) for layer in self.layers],
+            x,
+        )
+
+    def update(self, reward_amount: float = 0) -> None:
+        [layer.update(reward_amount) for layer in self.layers]
 
 
 def build_triangle_network(input_size: int = 2) -> dict[str, list[SignalingModule]]:
@@ -67,7 +88,7 @@ def build_triangle_network(input_size: int = 2) -> dict[str, list[SignalingModul
 
     Returns:
 
-        layers: a dict containing the levels of the binary tree, corresponding to layers of the signaling network. Of the form
+        agents: a dict containing the levels of the binary tree, corresponding to layers of the signaling network. Of the form
             {
                 "input": (list of agents),
                 "hidden": (list of lists of agents),
@@ -81,7 +102,7 @@ def build_triangle_network(input_size: int = 2) -> dict[str, list[SignalingModul
         )
 
     # default network
-    layers = {
+    agents = {
         "input": [AttentionSender(input_size) for _ in range(input_size)],
         "hidden": [],
         "output": [game.get_output_agent()],
@@ -97,8 +118,8 @@ def build_triangle_network(input_size: int = 2) -> dict[str, list[SignalingModul
 
     if layer_sizes:
         # populate each hidden layer with agents
-        layers["hidden"] = [
+        agents["hidden"] = [
             [game.get_compressor(size) for _ in range(size)] for size in layer_sizes
         ]
 
-    return layers
+    return agents

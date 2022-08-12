@@ -90,28 +90,26 @@ class SignalingModule:
     def forward(self, x) -> Any:
         raise NotImplementedError
 
+    def update(self, reward_amount: float = 0) -> None:
+        """Perform a learning update on the module, by optionally rewarding based on the last policy taken, and clearing the policy history for the next forward pass."""
+        if reward_amount:
+            self.reward(amount=reward_amount)
+        self.reset_history()
+
     def reward(self, amount: float) -> None:
 
         if len(self.history) != 1:
-            raise ValueError(f"Length of history must be exactly 1 to extract a unique policy to reward. Received history: {self.history}")
-        # TODO: refactor this and below into just an 'update' function
+            raise ValueError(
+                f"Length of history must be exactly 1 to extract a unique policy to reward. Received history: {self.history}"
+            )
 
         policy = self.history.pop()
         indices = self.policy_to_indices(policy)
         self.parameters[indices] += amount
 
-    def punish(self, amount: float) -> None:
-
-        if len(self.history) != 1:
-            raise ValueError(f"Length of history must be exactly 1 to extract a unique policy to punish. Received history: {self.history}")
-
-        policy = self.history.pop()
-        indices = self.policy_to_indices(policy)
-        self.parameters[indices] -= amount
-
-        # reset if necessary
-        if self.parameters[indices] < 1:
-            self.parameters[indices] = 1
+    def reset_history(self) -> None:
+        """Call this function after every forward pass through a module, whether it was rewarded or not."""
+        self.history = []
 
     @abstractmethod
     def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
@@ -176,10 +174,9 @@ class ReceiverSender(SignalingModule):
         # no need to touch `history`
         return self.sender(self.receiver(x))
 
-    def reward(self, amount: float) -> None:
-        """Reward the agent by incrementing its sub-agents' relevant parameters."""
-        self.receiver.reward(amount)
-        self.sender.reward(amount)
+    def update(self, reward_amount: float = 0) -> None:
+        self.receiver.update(reward_amount)
+        self.sender.update(reward_amount)
 
 
 class AttentionAgent(SignalingModule):
@@ -202,7 +199,9 @@ class AttentionAgent(SignalingModule):
         output = x[index]
 
         if len(self.history) != 0:
-            raise ValueError(f"The length of history before pushing a policy should be empty. The value of history: {self.history}")
+            raise ValueError(
+                f"The length of history before pushing a policy should be empty. The value of history: {self.history}"
+            )
 
         self.history.append({"index": index})
 
@@ -210,7 +209,7 @@ class AttentionAgent(SignalingModule):
 
     def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
         # a singleton tuple
-        return (policy["index"])
+        return policy["index"]
 
 
 class AttentionSignaler(SignalingModule):
@@ -228,16 +227,15 @@ class AttentionSignaler(SignalingModule):
     def forward(self, x: list[State]) -> Signal:
         return self.signaler(self.attention_layer(x))
 
-    def reward(self, amount: float) -> None:
-        """Reward the agent by incrementing its sub-agents' relevant parameters."""
-        self.attention_layer.reward(amount)
-        self.signaler.reward(amount)
+    def update(self, reward_amount: float = 0) -> None:
+        self.attention_layer.update(reward_amount)
+        self.signaler.update(reward_amount)
 
 
 class AttentionSender(AttentionSignaler):
     def __init__(self, input_size: int) -> None:
         super().__init__(
-            attention_layer=AttentionAgent(input_size), 
+            attention_layer=AttentionAgent(input_size),
             signaler=game.get_sender(),
         )
 
@@ -245,7 +243,7 @@ class AttentionSender(AttentionSignaler):
 class AttentionReceiver(AttentionSignaler):
     def __init__(self, input_size: int) -> None:
         super().__init__(
-            attention_layer=AttentionAgent(input_size), 
+            attention_layer=AttentionAgent(input_size),
             signaler=game.get_receiver(),
         )
 
@@ -280,12 +278,10 @@ class Compressor(SignalingModule):
         composite_signal = compose(signal_1, signal_2)
         return self.receiver_sender(composite_signal)
 
-    def reward(self, amount: float) -> None:
-        """Reward the agent by incrementing its sub-agents' relevant parameters."""
-        print("attention_1 history in reward: ", self.attention_1.history)
-        self.attention_1.reward(amount)
-        self.attention_2.reward(amount)
-        self.receiver_sender.reward(amount)
+    def update(self, reward_amount: float = 0) -> None:
+        self.attention_1.update(reward_amount)
+        self.attention_2.update(reward_amount)
+        self.receiver_sender.update(reward_amount)
 
 
 ##############################################################################

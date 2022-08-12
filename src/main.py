@@ -29,7 +29,6 @@ def main():
 
     # initialize network and parameters
     net = SignalTree(input_size=input_size)
-    amount = learning_rate * 1.0
 
     accuracy = []
     # main training loop
@@ -39,12 +38,9 @@ def main():
         y = example["label"]
         y_hat = net(x)
 
-        if y == y_hat:
-            net.reward(amount)
-        else:
-            net.punish(amount)
+        net.update(reward_amount=int(y == y_hat) * learning_rate)
 
-        acc = empirical_accuracy(net, dataset)
+        acc = empirical_accuracy(net, dataset, num_rounds=100)
         # record accuracy
         if r % 10 == 0:
             print(f"Accuracy on round {r}: {round(acc, 2)}")
