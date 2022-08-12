@@ -162,6 +162,8 @@ class ReceiverSender(SignalingModule):
 class AttentionAgent(SignalingModule):
     """An AttentionAgent implements a simple form of attention by sampling a single element of a many-element input. The probability of sampling a given element of the total input evolves under simple reinforcement learning."""
 
+    # problem: attention needs to be able to sample from arbitrarily long lists of states and signals. We don't know the size of these lists during construction time.
+
     def __init__(self, x: list[Any], parameters):
         # Create a weight vector to represent the probability distribution over elements to pay attention to
         self.input_size = len(x)
@@ -184,22 +186,25 @@ class AttentionAgent(SignalingModule):
         return self.inputs_to_indices[policy["attn"]]
 
 
-class AttentionSender(SignalingModule):
+class AttentionSignaler(SignalingModule):
+    """An AttentionSignaler module takes a complex input of signals or states, uses its attention layer to sample one of the elements, and passes the result to a signaler (either a SenderModule or ReceiverModule), and returns the resulting signaler's output."""
+
     def __init__(
         self,
         attention_layer: AttentionAgent,
-        sender: SenderModule,
+        signaler: SignalingModule,
     ) -> None:
 
         self.attention_layer = attention_layer
-        self.sender = sender
+        self.signaler = signaler
 
     def forward(self, x: list[State]) -> Signal:
-        return self.sender(self.attention_layer(x))
+        return self.signaler(self.attention_layer(x))
 
     def reward(self, amount: float) -> None:
         """Reward the agent by incrementing its sub-agents' relevant parameters."""
         self.attention_layer.reward(amount)
+        self.signaler.reward(amount)
 
 
 class Compressor(SignalingModule):
