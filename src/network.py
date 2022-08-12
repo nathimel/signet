@@ -74,5 +74,5 @@ def build_triangle_network(input_size: int = 2) -> dict[str, list[SignalingModul
         layers["hidden"] = [
             [Compressor(...) for _ in range(size)] for size in layer_sizes
         ]
-    
+
     return layers

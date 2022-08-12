@@ -1,0 +1,5 @@
+num_rounds: 100
+learning_rate: 1.0
+random_seed: 0
+file_paths:
+  save_accuracy_plot: "outputs/dev/accuracy.png"

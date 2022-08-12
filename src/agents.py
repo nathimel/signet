@@ -160,30 +160,29 @@ class ReceiverSender(SignalingModule):
 
 
 class AttentionAgent(SignalingModule):
-    """An AttentionAgent implements a simple form of attention by sampling a single element of a many-element input. The probability of sampling a given element of the total input evolves under simple reinforcement learning."""
+    """An AttentionAgent implements a simple form of attention by sampling a single element of a many-element input (a list of signals or states). The probability of sampling a given element of the total input evolves under simple reinforcement learning."""
 
-    # problem: attention needs to be able to sample from arbitrarily long lists of states and signals. We don't know the size of these lists during construction time.
-
-    def __init__(self, x: list[Any], parameters):
+    def __init__(self, input_size: int):
         # Create a weight vector to represent the probability distribution over elements to pay attention to
-        self.input_size = len(x)
+        self.input_size = input_size
         self.weights = np.ones(self.input_size)
-        self.inputs_to_indices = {item: i for i, item in enumerate(x)}
         self.history["attn"] = None
 
-    def forward(self, x: list[State]) -> State:
+    def forward(self, x: list[Any]) -> Any:
         return self.sample_input(x)
 
     def sample_input(self, x: list[State]) -> State:
-        state = np.random.sample(
-            a=x,
+        # sample an index
+        index = np.random.sample(
+            a=range(self.input_size),
             p=self.weights / self.weights.sum(),
         )
-        self.history.append(state)
+        output = x[index]
+        self.history.append({"index": index})
+        return output
 
-    def policy_to_indices(self, policy: dict[str, Any]) -> int:
-        """Map a policy to an input (state or signal) index."""
-        return self.inputs_to_indices[policy["attn"]]
+    def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
+        return policy["index"]
 
 
 class AttentionSignaler(SignalingModule):
