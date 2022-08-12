@@ -67,6 +67,9 @@ class Sequential(SignalingModule):
     def update(self, reward_amount: float = 0) -> None:
         [layer.update(reward_amount) for layer in self.layers]
 
+##############################################################################
+# Utility functions
+##############################################################################
 
 def build_triangle_network(input_size: int = 2) -> dict[str, list[SignalingModule]]:
     """Construct a signaling network to have a triangle shape, so that each layer doubles in size moving backwards, starting from the single output agent.
@@ -115,3 +118,30 @@ def build_triangle_network(input_size: int = 2) -> dict[str, list[SignalingModul
         ]
 
     return agents
+
+def empirical_accuracy(
+    net: SignalTree, 
+    dataset: list[dict[str, Any]], 
+    num_rounds: int = None,
+) -> float:
+    """
+    Evaluate the accuracy of a signaling networks by computing the average accuracy on the dataset.
+
+    Args:
+        num_rounds: an int representing how many interactions to record.
+    """
+    if num_rounds is None:
+        num_rounds = len(dataset)
+
+    num_correct = 0
+    for _ in range(num_rounds):
+        example = np.random.choice(dataset)
+
+        x = example["input"]
+        y = example["label"]
+        y_hat = net(x)
+
+        num_correct += 1 if y_hat == y else 0
+        net.update()
+
+    return num_correct / num_rounds

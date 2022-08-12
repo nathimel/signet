@@ -1,11 +1,10 @@
-from game import binary_data, empirical_accuracy, n_ary_data
 import util
 import vis
 import sys
 import numpy as np
-from network import SignalTree
+from network import SignalTree, empirical_accuracy
 from tqdm import tqdm
-
+from game import binary_data, n_ary_data, AND, OR, XOR, NAND
 
 def main():
     if len(sys.argv) != 2:
@@ -26,7 +25,7 @@ def main():
 
     # define learning problem
     # dataset = binary_data()
-    dataset = n_ary_data(n=input_size)
+    dataset = n_ary_data(n=input_size, connective=XOR)
 
     # initialize network and parameters
     net = SignalTree(input_size=input_size)

@@ -2,9 +2,8 @@ from abc import abstractmethod
 import numpy as np
 from altk.effcomm.agent import CommunicativeAgent, Speaker, Listener
 from altk.language.semantics import Meaning
-from languages import Signal, SignalMeaning, SignalingLanguage, State
+from languages import Signal, SignalMeaning, SignalingLanguage, State, get_binary_language, get_quaternary_language
 from typing import Any, Union
-import game
 
 ##############################################################################
 # Basic signaling agent wrappers for ALTK agents
@@ -266,15 +265,16 @@ class Compressor(SignalingModule):
         self.attention_1.update(reward_amount)
         self.attention_2.update(reward_amount)
 
+
 ##############################################################################
-# Main agents
+# Main game agents
 ##############################################################################
 
 class InputSender(AttentionSignaler):
     def __init__(self, input_size: int) -> None:
         super().__init__(
             attention_layer=AttentionAgent(input_size),
-            signaler=game.get_sender(),
+            signaler=get_sender(),
         )
 
 class HiddenSignaler(SignalingModule):
@@ -283,7 +283,7 @@ class HiddenSignaler(SignalingModule):
     def __init__(self, input_size: int) -> None:
         self.input_size = input_size
         self.compressor = Compressor(input_size)
-        self.receiver_sender = game.get_receiver_sender()
+        self.receiver_sender = get_receiver_sender()
 
     def forward(self, x) -> Any:
         return self.receiver_sender(self.compressor(x))
@@ -300,7 +300,7 @@ class OutputReceiver(SignalingModule):
         """By default input size is 2 for this 'root node' of a binary tree shaped network."""
         self.input_size = input_size
         self.compressor = Compressor(input_size)
-        self.receiver = game.get_quaternary_receiver()
+        self.receiver = get_quaternary_receiver()
 
     def forward(self, x) -> Any:
         return self.receiver(self.compressor(x))
@@ -311,9 +311,34 @@ class OutputReceiver(SignalingModule):
 
 
 ##############################################################################
-# Helper functions
+# Helper default functions 
+# 
+# for creating the agents typically used
+# in predicting the truth values of boolean sentences with signaling networks
 ##############################################################################
 
+
+def get_sender() -> SenderModule:
+    """Get a 2 state, 2 signal SenderModule instance initialized for boolean games."""
+    return SenderModule(sender=Sender(language=get_binary_language()))
+
+
+def get_receiver() -> ReceiverModule:
+    """Get a ReceiverModule instance initialized for boolean games."""
+    return ReceiverModule(receiver=Receiver(language=get_binary_language()))
+
+
+def get_quaternary_receiver() -> ReceiverModule:
+    """Get a 4 signal, 2 state ReceiverModule instsance initialized for boolean games."""
+    return ReceiverModule(receiver=Receiver(language=get_quaternary_language()))
+
+
+def get_receiver_sender() -> ReceiverSender:
+    """Get a ReceiverSender instance initialized for boolean games."""
+    return ReceiverSender(
+        receiver=get_quaternary_receiver(),
+        sender=get_sender(),
+    )
 
 def compose(signal_a: Signal, signal_b: Signal) -> Signal:
     return Signal(f"{signal_a.form}{signal_b.form}")

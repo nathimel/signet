@@ -121,3 +121,51 @@ class SignalingLanguage(Language):
             },
         }
         return data
+
+##############################################################################
+# Helper default functions 
+# 
+# for creating the languages typically used
+# in predicting the truth values of boolean sentences with signaling networks
+##############################################################################
+
+
+
+def get_binary_language() -> SignalingLanguage:
+    """Get a 2 state, 2 signal SignalingLanguage instance initialized for boolean games."""
+
+    states = [State(name="0"), State(name="1")]
+    universe = StateSpace(states)
+
+    dummy_meaning = SignalMeaning(
+        states=states,
+        universe=universe,
+    )
+    signals = [
+        Signal(form="0", meaning=dummy_meaning),
+        Signal(form="1", meaning=dummy_meaning),
+    ]
+
+    return SignalingLanguage(
+        signals=signals,
+    )
+
+
+def get_quaternary_language() -> SignalingLanguage:
+    """Get a 2 state, 4 signal SignalingLanguage instance initialized for boolean games."""
+    states = [State(name="0"), State(name="1")]
+    universe = StateSpace(states)
+    dummy_meaning = SignalMeaning(
+        states=states,
+        universe=universe,
+    )
+    signals = [
+        Signal(form="00", meaning=dummy_meaning),
+        Signal(form="01", meaning=dummy_meaning),
+        Signal(form="10", meaning=dummy_meaning),
+        Signal(form="11", meaning=dummy_meaning),
+    ]
+
+    return SignalingLanguage(
+        signals=signals,
+    )
