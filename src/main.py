@@ -1,8 +1,8 @@
-from .game import binary_data, empirical_accuracy
+from game import binary_data, empirical_accuracy, n_ary_data
 import util
 import vis
 import sys
-import random
+import numpy as np
 from network import SignalTree
 
 
@@ -16,6 +16,7 @@ def main():
     configs = util.load_configs(config_fn)
 
     num_rounds = configs["num_rounds"]
+    input_size = configs["input_size"]
     learning_rate = configs["learning_rate"]
     random_seed = configs["random_seed"]
     save_accuracy_plot = configs["file_paths"]["save_accuracy_plot"]
@@ -23,24 +24,27 @@ def main():
     util.set_seed(random_seed)
 
     # define learning problem
-    dataset = binary_data()
+    # dataset = binary_data()
+    dataset = n_ary_data(n=input_size)
 
     # initialize network and parameters
-    net = SignalTree(input_size=2)
+    net = SignalTree(input_size=input_size)
     amount = learning_rate * 1.0
 
     accuracy = []
     # main training loop
-    for r in num_rounds:
-        example = random.sample(dataset)
+    for r in range(num_rounds):
+        example = np.random.choice(dataset)
         x = example["input"]
         y = example["label"]
         y_hat = net(x)
 
         if y == y_hat:
             net.reward(amount)
+        else:
+            net.punish(amount)
 
-        acc = empirical_accuracy()
+        acc = empirical_accuracy(net, dataset)
         # record accuracy
         if r % 10 == 0:
             print(f"Accuracy on round {r}: {round(acc, 2)}")

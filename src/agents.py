@@ -3,7 +3,8 @@ import numpy as np
 from altk.effcomm.agent import CommunicativeAgent, Speaker, Listener
 from altk.language.semantics import Meaning
 from languages import Signal, SignalMeaning, SignalingLanguage, State
-from typing import Any
+from typing import Any, Union
+import game
 
 ##############################################################################
 # Basic signaling agent wrappers for ALTK agents
@@ -72,7 +73,7 @@ class SignalingModule:
 
     def __init__(self, parameters: np.ndarray = None) -> None:
         self.history = []
-        self._parameters = None
+        self._parameters = parameters
 
     @property
     def parameters(self) -> np.ndarray:
@@ -90,9 +91,27 @@ class SignalingModule:
         raise NotImplementedError
 
     def reward(self, amount: float) -> None:
+
+        if len(self.history) != 1:
+            raise ValueError(f"Length of history must be exactly 1 to extract a unique policy to reward. Received history: {self.history}")
+        # TODO: refactor this and below into just an 'update' function
+
         policy = self.history.pop()
         indices = self.policy_to_indices(policy)
         self.parameters[indices] += amount
+
+    def punish(self, amount: float) -> None:
+
+        if len(self.history) != 1:
+            raise ValueError(f"Length of history must be exactly 1 to extract a unique policy to punish. Received history: {self.history}")
+
+        policy = self.history.pop()
+        indices = self.policy_to_indices(policy)
+        self.parameters[indices] -= amount
+
+        # reset if necessary
+        if self.parameters[indices] < 1:
+            self.parameters[indices] = 1
 
     @abstractmethod
     def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
@@ -128,6 +147,9 @@ class ReceiverModule(SignalingModule):
         self.history.append({"referent": state, "expression": x})
         return state
 
+    def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
+        return self.receiver.policy_to_indices(policy)
+
 
 """Composite modules only need to store their sub-agents, and call the forward and reward api of these sub-agents. These agents are assumed to be already instantiated, which means that their required and optional parameters should have been set, and now their internal parameters shouldn't be touched."""
 
@@ -148,6 +170,7 @@ class ReceiverSender(SignalingModule):
         self.receiver = receiver
         self.sender = sender
         self.name = name
+        super().__init__()
 
     def forward(self, x: Signal) -> Signal:
         # no need to touch `history`
@@ -165,24 +188,29 @@ class AttentionAgent(SignalingModule):
     def __init__(self, input_size: int):
         # Create a weight vector to represent the probability distribution over elements to pay attention to
         self.input_size = input_size
-        self.weights = np.ones(self.input_size)
-        self.history["attn"] = None
+        super().__init__(parameters=np.ones(self.input_size))
 
     def forward(self, x: list[Any]) -> Any:
         return self.sample_input(x)
 
     def sample_input(self, x: list[State]) -> State:
         # sample an index
-        index = np.random.sample(
+        index = np.random.choice(
             a=range(self.input_size),
-            p=self.weights / self.weights.sum(),
+            p=self.parameters / self.parameters.sum(),
         )
         output = x[index]
+
+        if len(self.history) != 0:
+            raise ValueError(f"The length of history before pushing a policy should be empty. The value of history: {self.history}")
+
         self.history.append({"index": index})
+
         return output
 
     def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
-        return policy["index"]
+        # a singleton tuple
+        return (policy["index"])
 
 
 class AttentionSignaler(SignalingModule):
@@ -191,11 +219,11 @@ class AttentionSignaler(SignalingModule):
     def __init__(
         self,
         attention_layer: AttentionAgent,
-        signaler: SignalingModule,
+        signaler: Union[SenderModule, ReceiverModule],
     ) -> None:
-
         self.attention_layer = attention_layer
         self.signaler = signaler
+        super().__init__()
 
     def forward(self, x: list[State]) -> Signal:
         return self.signaler(self.attention_layer(x))
@@ -204,6 +232,22 @@ class AttentionSignaler(SignalingModule):
         """Reward the agent by incrementing its sub-agents' relevant parameters."""
         self.attention_layer.reward(amount)
         self.signaler.reward(amount)
+
+
+class AttentionSender(AttentionSignaler):
+    def __init__(self, input_size: int) -> None:
+        super().__init__(
+            attention_layer=AttentionAgent(input_size), 
+            signaler=game.get_sender(),
+        )
+
+
+class AttentionReceiver(AttentionSignaler):
+    def __init__(self, input_size: int) -> None:
+        super().__init__(
+            attention_layer=AttentionAgent(input_size), 
+            signaler=game.get_receiver(),
+        )
 
 
 class Compressor(SignalingModule):
@@ -227,15 +271,18 @@ class Compressor(SignalingModule):
         self.attention_1 = attention_1  # of shape (input_size, 1)
         self.attention_2 = attention_2  # of shape (input_size, 1)
         self.receiver_sender = receiver_sender  # of shape (4, 2)
+        super().__init__()
 
     def forward(self, x: list[Signal]) -> Signal:
         signal_1 = self.attention_1(x)
+        # print("attention_1 history in forward: ", self.attention_1.history)
         signal_2 = self.attention_2(x)
         composite_signal = compose(signal_1, signal_2)
         return self.receiver_sender(composite_signal)
 
     def reward(self, amount: float) -> None:
         """Reward the agent by incrementing its sub-agents' relevant parameters."""
+        print("attention_1 history in reward: ", self.attention_1.history)
         self.attention_1.reward(amount)
         self.attention_2.reward(amount)
         self.receiver_sender.reward(amount)

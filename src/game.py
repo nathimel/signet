@@ -2,11 +2,11 @@
 
 import numpy as np
 
-from .network import SignalTree
-from .languages import Signal, SignalMeaning, SignalingLanguage, State, StateSpace
-from .agents import (
+from network import SignalTree
+from languages import Signal, SignalMeaning, SignalingLanguage, State, StateSpace
+from agents import (
     AttentionAgent,
-    AttentionSignaler,
+    AttentionReceiver,
     Compressor,
     Receiver,
     ReceiverModule,
@@ -16,7 +16,11 @@ from .agents import (
 )
 from itertools import product
 from typing import Any, Callable
+from functools import reduce
 
+##############################################################################
+# Data and evaluation
+##############################################################################
 
 def generate_data(sentence: str = "p and q") -> list[dict[str, State]]:
     """Given a boolean function, generate a dataset of positive examples to train agents on corresponding to the table representation of the function.
@@ -43,6 +47,18 @@ def generate_data(sentence: str = "p and q") -> list[dict[str, State]]:
     return examples
 
 
+def n_ary_data(n: int):
+    f = lambda inputs: reduce(lambda x, y: x and y, inputs)
+    examples = []
+    assignments = list(product([0, 1], repeat=n)) # get all possible combinations of truth values
+    for inputs in assignments:
+        example = {
+            "input": [State(str(atom)) for atom in inputs],  # a list of states
+            "label": State(str(f(inputs))),  # a state
+        }
+        examples.append(example)
+    return examples    
+
 def binary_data(
     f: Callable[[bool, bool], bool] = lambda x, y: x and y
 ) -> list[dict[str, State]]:
@@ -57,7 +73,7 @@ def binary_data(
     examples = []
     for p, q in product([True, False], [True, False]):
         example = {
-            "input": State("".join([str(int(p)), str(int(q))])),
+            "input": [State(str(int(p))), State(str(int(q)))],
             "label": State(str(int(f(p, q)))),
         }
         examples.append(example)
@@ -94,8 +110,8 @@ def empirical_accuracy(
 ##############################################################################
 
 
-def get_language() -> SignalingLanguage:
-    """Get a SignalingLanguage instance initialized for boolean games."""
+def get_binary_language() -> SignalingLanguage:
+    """Get a 2 state, 2 signal SignalingLanguage instance initialized for boolean games."""
 
     states = [State(name="0"), State(name="1")]
     universe = StateSpace(states)
@@ -113,50 +129,54 @@ def get_language() -> SignalingLanguage:
         signals=signals,
     )
 
+def get_quaternary_language() -> SignalingLanguage:
+    """Get a 2 state, 4 signal SignalingLanguage instance initialized for boolean games."""
+    states = [State(name="0"), State(name="1")]
+    universe = StateSpace(states)
+    dummy_meaning = SignalMeaning(
+        states=states,
+        universe=universe,
+    )
+    signals = [
+        Signal(form="00", meaning=dummy_meaning),
+        Signal(form="01", meaning=dummy_meaning),
+        Signal(form="10", meaning=dummy_meaning),
+        Signal(form="11", meaning=dummy_meaning),
+    ]
+
+    return SignalingLanguage(
+        signals=signals,
+    )    
 
 def get_sender() -> SenderModule:
-    """Get a SenderModule instance initialized for boolean games."""
-    return SenderModule(sender=Sender(language=get_language()))
-
+    """Get a 2 state, 2 signal SenderModule instance initialized for boolean games."""
+    return SenderModule(sender=Sender(language=get_binary_language()))
 
 def get_receiver() -> ReceiverModule:
     """Get a ReceiverModule instance initialized for boolean games."""
-    return ReceiverModule(receiver=Receiver(language=get_language()))
+    return ReceiverModule(receiver=Receiver(language=get_binary_language()))
+
+def get_quaternary_receiver() -> SenderModule:
+    """Get a 4 signal, 2 state ReceiverModule instsance initialized for boolean games."""
+    return ReceiverModule(receiver=Receiver(language=get_quaternary_language()))
 
 
 def get_receiver_sender() -> ReceiverSender:
     """Get a ReceiverSender instance initialized for boolean games."""
     return ReceiverSender(
-        receiver=get_receiver(),
+        receiver=get_quaternary_receiver(),
         sender=get_sender(),
     )
 
-
 def get_compressor(input_size: int) -> Compressor:
     """Get a Compressor instance initialized for boolean games."""
-    attention_1 = AttentionAgent(input_size)
-    attention_2 = AttentionAgent(input_size)
-
-    receiver_sender = get_receiver_sender()
-
     return Compressor(
-        attention_1=attention_1,
-        attention_2=attention_2,
-        receiver_sender=receiver_sender,
+        attention_1=AttentionAgent(input_size),
+        attention_2=AttentionAgent(input_size),
+        receiver_sender=get_receiver_sender(),
     )
 
 
-def get_attention_sender(input_size: int) -> AttentionSignaler:
-    """Get an AttentionSignaler (Sender) instance initialized for boolean games."""
-    return AttentionSignaler(
-        attention_layer=AttentionAgent(input_size),
-        signaler=get_sender(),
-    )
-
-
-def get_attention_receiver(input_size: int) -> AttentionSignaler:
-    """Get an AttentionSignaler (Receiver) instance initialized for boolean games."""
-    return AttentionSignaler(
-        attention_layer=AttentionAgent(input_size),
-        signaler=get_sender(),
-    )
+def get_output_agent() -> AttentionReceiver:
+    """Get an output agent instance initialized for boolean games."""
+    return AttentionReceiver(2)

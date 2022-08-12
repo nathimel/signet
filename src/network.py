@@ -1,7 +1,9 @@
+import game
 import numpy as np
-from agents import SignalingModule
-from languages import State
-from .agents import AttentionSignaler, Compressor
+from agents import SignalingModule, AttentionSender, AttentionSignaler, Compressor
+from languages import State, Signal
+from functools import reduce
+from typing import Any, Callable
 
 
 class SignalTree(SignalingModule):
@@ -14,20 +16,43 @@ class SignalTree(SignalingModule):
 
     def __init__(self, input_size: int) -> None:
         # initialize layers
-        self.tree = build_triangle_network(input_size)
+        self.layers = build_triangle_network(input_size)
 
-        self.input_layer = None
-        self.hidden_layers = None
-        self.output_layer = None
+        # wrap each layer of agents as a function
+        self.input_layer = lambda x: [agent(x) for agent in self.layers["input"]]
+
+        if self.layers["hidden"]:
+            self.hidden_layers = lambda x: sequential(self.layers["hidden"], x)
+
+        self.output_layer = lambda x: self.layers["output"][0](x)
 
     def forward(self, x: list[State]) -> State:
-        return self.output_layer(self.hidden_layer(self.input_layer(x)))
+        x_hat = self.input_layer(x)
+        if self.layers["hidden"]:
+            x_hat = self.hidden_layers(x_hat)
+        output = self.output_layer(x_hat)
+        return output
 
     def reward(self, amount: float) -> None:
         [
-            layer.reward()
-            for layer in [self.input_layer] + self.hidden_layers + [self.output_layer]
+            agent.reward(amount)
+            for layer in [self.layers["input"]] + self.layers["hidden"] + [self.layers["output"]] for agent in layer
         ]
+    
+    def punish(self, amount: float) -> None:
+        [
+            agent.punish(amount)
+            for layer in [self.layers["input"]] + self.layers["hidden"] + [self.layers["output"]] for agent in layer
+        ]        
+
+
+def sequential(
+    layers: list[list[SignalingModule]], input_signals: list[Signal]
+) -> Callable[[list[Any]], list[Any]]:
+    """Converts a list of layers to a function reducing the result of each applied in order."""
+    funcs = [lambda x: [agent(x) for agent in layer] for layer in layers]
+    result = reduce(lambda res, f: f(res), funcs, input_signals)
+    return result
 
 
 def build_triangle_network(input_size: int = 2) -> dict[str, list[SignalingModule]]:
@@ -57,14 +82,15 @@ def build_triangle_network(input_size: int = 2) -> dict[str, list[SignalingModul
 
     # default network
     layers = {
-        "input": [AttentionSignaler(...) for _ in range(input_size)],  # sender
-        "output": [AttentionSignaler(...)],  # receiver
+        "input": [AttentionSender(input_size) for _ in range(input_size)],
+        "hidden": [],
+        "output": [game.get_output_agent()],
     }
 
     # create a list of the sizes of each hidden layer
-    layer_sizes = [
-        2**j for j in range(0, int(np.ceil(np.log2(input_size))) + 1)
-    ].reverse()
+    layer_sizes = list(
+        reversed([2**j for j in range(0, int(np.ceil(np.log2(input_size))) + 1)])
+    )
     # remove input and output layers
     layer_sizes.pop(-1)
     layer_sizes.pop(0)
@@ -72,7 +98,7 @@ def build_triangle_network(input_size: int = 2) -> dict[str, list[SignalingModul
     if layer_sizes:
         # populate each hidden layer with agents
         layers["hidden"] = [
-            [Compressor(...) for _ in range(size)] for size in layer_sizes
+            [game.get_compressor(size) for _ in range(size)] for size in layer_sizes
         ]
 
     return layers
