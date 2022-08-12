@@ -6,7 +6,6 @@ from network import SignalTree
 from languages import Signal, SignalMeaning, SignalingLanguage, State, StateSpace
 from agents import (
     AttentionAgent,
-    AttentionReceiver,
     Compressor,
     Receiver,
     ReceiverModule,
@@ -168,7 +167,7 @@ def get_receiver() -> ReceiverModule:
     return ReceiverModule(receiver=Receiver(language=get_binary_language()))
 
 
-def get_quaternary_receiver() -> SenderModule:
+def get_quaternary_receiver() -> ReceiverModule:
     """Get a 4 signal, 2 state ReceiverModule instsance initialized for boolean games."""
     return ReceiverModule(receiver=Receiver(language=get_quaternary_language()))
 
@@ -181,15 +180,18 @@ def get_receiver_sender() -> ReceiverSender:
     )
 
 
-def get_compressor(input_size: int) -> Compressor:
-    """Get a Compressor instance initialized for boolean games."""
-    return Compressor(
-        attention_1=AttentionAgent(input_size),
-        attention_2=AttentionAgent(input_size),
-        receiver_sender=get_receiver_sender(),
-    )
+# def get_compressor(input_size: int) -> Compressor:
+#     """Get a Compressor instance initialized for boolean games."""
+#     return Compressor(
+#         attention_1=AttentionAgent(input_size),
+#         attention_2=AttentionAgent(input_size),
+#         receiver_sender=get_receiver_sender(),
+#     )
 
+# def get_input_agent(input_size: int) -> InputSender:
+#     """Get an input agent (Sender) instance initialized for boolean games."""
+#     return InputSender(input_size)
 
-def get_output_agent() -> AttentionReceiver:
-    """Get an output agent instance initialized for boolean games."""
-    return AttentionReceiver(2)
+# def get_output_agent() -> OutputReceiver:
+#     """Get an output agent (Receiver) instance initialized for boolean games."""
+#     return OutputReceiver(2)

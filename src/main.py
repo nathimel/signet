@@ -4,6 +4,7 @@ import vis
 import sys
 import numpy as np
 from network import SignalTree
+from tqdm import tqdm
 
 
 def main():
@@ -32,7 +33,7 @@ def main():
 
     accuracy = []
     # main training loop
-    for r in range(num_rounds):
+    for r in tqdm(range(num_rounds)):
         example = np.random.choice(dataset)
         x = example["input"]
         y = example["label"]

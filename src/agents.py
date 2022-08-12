@@ -190,7 +190,7 @@ class AttentionAgent(SignalingModule):
     def forward(self, x: list[Any]) -> Any:
         return self.sample_input(x)
 
-    def sample_input(self, x: list[State]) -> State:
+    def sample_input(self, x: list[Any]) -> Any:
         # sample an index
         index = np.random.choice(
             a=range(self.input_size),
@@ -200,7 +200,7 @@ class AttentionAgent(SignalingModule):
 
         if len(self.history) != 0:
             raise ValueError(
-                f"The length of history before pushing a policy should be empty. The value of history: {self.history}"
+                f"The length of history before pushing a policy should be empty. Check that update() was called. The value of history: {self.history}"
             )
 
         self.history.append({"index": index})
@@ -224,64 +224,90 @@ class AttentionSignaler(SignalingModule):
         self.signaler = signaler
         super().__init__()
 
-    def forward(self, x: list[State]) -> Signal:
+    def forward(self, x: list[Any]) -> Any:
         return self.signaler(self.attention_layer(x))
 
     def update(self, reward_amount: float = 0) -> None:
         self.attention_layer.update(reward_amount)
         self.signaler.update(reward_amount)
 
+class Compressor(SignalingModule):
+    """A Compressor module is a unit with two attention heads. It takes a list of signals as input, chooses two and combines them (as one of four possible combinations). This composite signal can become input to another agent.
+    
+    The Compressor is named so because it can compress an arbitrarily large input space to a single output, by sampling a pair of inputs and combining them.
 
-class AttentionSender(AttentionSignaler):
+    Attributes:
+        attention_1: an AttentionAgent to sample the first input signal
+
+        attention_2: an AttentionAgent to sample the second input signal
+    """
+
+    def __init__(
+        self,
+        input_size: int,
+    ) -> None:
+        """Construct a Compressor module.
+
+        Args:
+            input_size: the number of incoming signals to compress to a single signal.
+        """
+        self.input_size = input_size
+        self.attention_1 = AttentionAgent(self.input_size)  # shape (input_size, 1)
+        self.attention_2 = AttentionAgent(self.input_size)  # shape (input_size, 1)
+        super().__init__()
+
+    def forward(self, x: list[Signal]) -> Signal:
+        return compose(
+            self.attention_1(x), 
+            self.attention_2(x),
+            )
+
+    def update(self, reward_amount: float = 0) -> None:
+        self.attention_1.update(reward_amount)
+        self.attention_2.update(reward_amount)
+
+##############################################################################
+# Main agents
+##############################################################################
+
+class InputSender(AttentionSignaler):
     def __init__(self, input_size: int) -> None:
         super().__init__(
             attention_layer=AttentionAgent(input_size),
             signaler=game.get_sender(),
         )
 
-
-class AttentionReceiver(AttentionSignaler):
+class HiddenSignaler(SignalingModule):
+    """The basic building block of 'hidden' layers of a signaling network, consisting of a Compressor unit to get a composite (binary, e.g. "00") signal from the previous layer as input, and a ReceiverSender to send a simple (unary, e.g. "0") signal as output.
+    """
     def __init__(self, input_size: int) -> None:
-        super().__init__(
-            attention_layer=AttentionAgent(input_size),
-            signaler=game.get_receiver(),
-        )
+        self.input_size = input_size
+        self.compressor = Compressor(input_size)
+        self.receiver_sender = game.get_receiver_sender()
 
-
-class Compressor(SignalingModule):
-    """A Compressor unit is a ReceiverSender unit with two attention heads. It takes a list of signals as input, chooses two and combines them (as one of four possible combinations). It then chooses to send one of two possible signals as output. The Compressor is named because it maps an input space of 4 to an output space of 2."""
-
-    def __init__(
-        self,
-        attention_1: AttentionAgent,
-        attention_2: AttentionAgent,
-        receiver_sender: ReceiverSender,
-    ) -> None:
-        """Construct a Compressor module.
-
-        Args:
-            attention_1:
-
-            attention_2:
-
-            receiver_sender: A ReceiverSender unit composed out of a Receiver that takes one of 4 possible signals and outputs one of 2 possible states, and a Sender that takes one of 2 possible states and outputs one of 2 possible signals.
-        """
-        self.attention_1 = attention_1  # of shape (input_size, 1)
-        self.attention_2 = attention_2  # of shape (input_size, 1)
-        self.receiver_sender = receiver_sender  # of shape (4, 2)
-        super().__init__()
-
-    def forward(self, x: list[Signal]) -> Signal:
-        signal_1 = self.attention_1(x)
-        # print("attention_1 history in forward: ", self.attention_1.history)
-        signal_2 = self.attention_2(x)
-        composite_signal = compose(signal_1, signal_2)
-        return self.receiver_sender(composite_signal)
+    def forward(self, x) -> Any:
+        return self.receiver_sender(self.compressor(x))
 
     def update(self, reward_amount: float = 0) -> None:
-        self.attention_1.update(reward_amount)
-        self.attention_2.update(reward_amount)
+        self.compressor.update(reward_amount)
         self.receiver_sender.update(reward_amount)
+
+class OutputReceiver(SignalingModule):
+
+    """The final output agent for a signaling network is a module with a compressor unit to combine two signals, and a receiver to map this composite signal into an act.
+    """
+    def __init__(self, input_size: int = 2) -> None:
+        """By default input size is 2 for this 'root node' of a binary tree shaped network."""
+        self.input_size = input_size
+        self.compressor = Compressor(input_size)
+        self.receiver = game.get_quaternary_receiver()
+
+    def forward(self, x) -> Any:
+        return self.receiver(self.compressor(x))
+
+    def update(self, reward_amount: float = 0) -> None:
+        self.compressor.update(reward_amount)
+        self.receiver.update(reward_amount)
 
 
 ##############################################################################
