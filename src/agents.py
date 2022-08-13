@@ -1,5 +1,6 @@
-from abc import abstractmethod
+import random
 import numpy as np
+from abc import abstractmethod
 from altk.effcomm.agent import CommunicativeAgent, Speaker, Listener
 from altk.language.semantics import Meaning
 from languages import (
@@ -369,6 +370,32 @@ class OutputReceiver(SignalingModule):
     def update(self, reward_amount: float = 0) -> None:
         self.compressor.update(reward_amount)
         self.receiver.update(reward_amount)
+
+
+##############################################################################
+# Baseline agents
+##############################################################################
+
+class Baseline(SignalingModule):
+    """Baseline module that does not learn."""
+
+    def update(self, reward_amount: float = 0) -> None:
+        pass
+
+class Bottom(Baseline):
+    """Always returns 0."""
+    def forward(self, x) -> State:
+        return State(name="0")
+
+class Top(Baseline):
+    """Always returns 1."""
+    def forward(self, x) -> State:
+        return State(name="1")
+
+class Random(Baseline):
+    """Randomly return a state."""
+    def forward(self, x) -> State:
+        return random.choice([State(name="0"), State(name="1")])
 
 
 ##############################################################################

@@ -3,9 +3,10 @@ import vis
 import sys
 import random
 import numpy as np
+from agents import Random, Top, Bottom
+from game import binary_data, n_ary_data, AND, OR, XOR, NAND, IMPLIES, IFF
 from network import SignalTree, empirical_accuracy
 from tqdm import tqdm
-from game import binary_data, n_ary_data, AND, OR, XOR, NAND, IMPLIES, IFF
 
 
 def main():
@@ -27,10 +28,12 @@ def main():
 
     # define learning problem
     # dataset = binary_data()
-    dataset = n_ary_data(n=input_size, connective=NAND)
+    dataset = n_ary_data(n=input_size, connective=AND)
 
     # initialize network and parameters
-    net = SignalTree(input_size=input_size, learning_rate=learning_rate)
+    # net = SignalTree(input_size=input_size, learning_rate=learning_rate)
+    # net = Random()
+    net = Bottom()
 
     accuracy = []
     # main training loop
