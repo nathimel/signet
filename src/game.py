@@ -14,28 +14,37 @@ from functools import reduce
 
 # Connectives
 
+
 def AND(x: bool, y: bool) -> bool:
     return x and y
+
 
 def OR(x: bool, y: bool) -> bool:
     return x or y
 
+
 def XOR(x: bool, y: bool) -> bool:
     return x != y
+
 
 def NAND(x: bool, y: bool) -> bool:
     return not (x and y)
 
+
 def IMPLIES(x: bool, y: bool) -> bool:
     return not x or y
+
 
 def IFF(x: bool, y: bool) -> bool:
     return x == y
 
+
 # Utility functions
+
 
 def bool_to_state(x: bool) -> State:
     return State(str(int(x)))
+
 
 def generate_data(sentence: str = "p and q") -> list[dict[str, State]]:
     """Given a boolean function, generate a dataset of positive examples to train agents on corresponding to the table representation of the function.
@@ -62,10 +71,7 @@ def generate_data(sentence: str = "p and q") -> list[dict[str, State]]:
     return examples
 
 
-def n_ary_data(
-    n: int, 
-    connective: Callable[[bool, bool], bool] = lambda x, y: x and y
-    ):
+def n_ary_data(n: int, connective: Callable[[bool, bool], bool] = lambda x, y: x and y):
     f = lambda inputs: reduce(connective, inputs)
     examples = []
     assignments = list(

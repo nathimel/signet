@@ -2,7 +2,14 @@ from abc import abstractmethod
 import numpy as np
 from altk.effcomm.agent import CommunicativeAgent, Speaker, Listener
 from altk.language.semantics import Meaning
-from languages import Signal, SignalMeaning, SignalingLanguage, State, get_binary_language, get_quaternary_language
+from languages import (
+    Signal,
+    SignalMeaning,
+    SignalingLanguage,
+    State,
+    get_binary_language,
+    get_quaternary_language,
+)
 from typing import Any, Union
 
 ##############################################################################
@@ -70,9 +77,49 @@ class SignalingModule:
         history: a stack to represent the (most recent) policies taken by the agent.
     """
 
-    def __init__(self, parameters: np.ndarray = None) -> None:
+    def __init__(
+        self,
+        parameters: np.ndarray = None,
+        learner: str = "Bush-Mosteller",
+        learning_rate: float = 1.0,
+    ) -> None:
+        """The base constructor for a signaling module used to build signaling networks.
+
+        Args:
+            parameters: optional numpy array of weights for an agent.
+
+            learner: {"Roth-Erev", "Bush-Mosteller"} the kind of learning dynamics to implement. Default is "Roth-Erev".
+
+            learning_rate: a float determining speed of learning. If Roth-Erev learning, multiply rewards by this value. Bush-Mosteller rewards requires a learning_rate in the interval [0,1].
+        """
         self.history = []
-        self._parameters = parameters
+        self.parameters = parameters
+        self.learning_rate = learning_rate
+
+        # In training mode or not / whether to update parameters
+        self.train_mode = True
+
+        if learner == "Roth-Erev":
+            # assign reward func
+            self.reward_func = roth_erev_reinforce
+        elif learner == "Bush-Mosteller":
+            # check learning rate
+            if self.learning_rate < 0.0 or self.learning_rate > 1.0:
+                raise ValueError(
+                    f"learning rate must be in [0,1] for Bush-Mosteller learning. Received: {learning_rate}."
+                )
+            # assign reward func
+            self.reward_func = bush_mosteller_reinforce
+            # normalize vectors to sum to 1.0
+            if self.train_mode:
+                if self.parameters is not None:
+                    axis = self.parameters.ndim - 1
+                    self.parameters /= self.parameters.sum(axis=axis, keepdims=True)
+
+        else:
+            raise ValueError(
+                f"The argument `learner` must be either 'Roth-erev' or 'Bush-Mosteller'. Received: {learner}"
+            )
 
     @property
     def parameters(self) -> np.ndarray:
@@ -92,7 +139,7 @@ class SignalingModule:
     def update(self, reward_amount: float = 0) -> None:
         """Perform a learning update on the module, by optionally rewarding based on the last policy taken, and clearing the policy history for the next forward pass."""
         if reward_amount:
-            self.reward(amount=reward_amount)
+            self.reward(amount=self.learning_rate * reward_amount)
         self.reset_history()
 
     def reward(self, amount: float) -> None:
@@ -104,7 +151,9 @@ class SignalingModule:
 
         policy = self.history.pop()
         indices = self.policy_to_indices(policy)
-        self.parameters[indices] += amount
+        self.parameters = self.reward_func(
+            self.parameters, indices, amount, learning_rate=self.learning_rate
+        )
 
     def reset_history(self) -> None:
         """Call this function after every forward pass through a module, whether it was rewarded or not."""
@@ -114,6 +163,14 @@ class SignalingModule:
     def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
         """Returns a tuple containing one or more indices representing the location of the parameter for a policy."""
         raise NotImplementedError
+
+    def train(self) -> None:
+        """Set module to training mode."""
+        self.train_mode = True
+
+    def test(self) -> None:
+        """Set module to testing mode."""
+        self.train_mode = False
 
 
 class SenderModule(SignalingModule):
@@ -208,7 +265,7 @@ class AttentionAgent(SignalingModule):
 
     def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
         # a singleton tuple
-        return policy["index"]
+        return tuple([policy["index"]])
 
 
 class AttentionSignaler(SignalingModule):
@@ -230,9 +287,10 @@ class AttentionSignaler(SignalingModule):
         self.attention_layer.update(reward_amount)
         self.signaler.update(reward_amount)
 
+
 class Compressor(SignalingModule):
     """A Compressor module is a unit with two attention heads. It takes a list of signals as input, chooses two and combines them (as one of four possible combinations). This composite signal can become input to another agent.
-    
+
     The Compressor is named so because it can compress an arbitrarily large input space to a single output, by sampling a pair of inputs and combining them.
 
     Attributes:
@@ -257,9 +315,9 @@ class Compressor(SignalingModule):
 
     def forward(self, x: list[Signal]) -> Signal:
         return compose(
-            self.attention_1(x), 
+            self.attention_1(x),
             self.attention_2(x),
-            )
+        )
 
     def update(self, reward_amount: float = 0) -> None:
         self.attention_1.update(reward_amount)
@@ -270,6 +328,7 @@ class Compressor(SignalingModule):
 # Main game agents
 ##############################################################################
 
+
 class InputSender(AttentionSignaler):
     def __init__(self, input_size: int) -> None:
         super().__init__(
@@ -277,9 +336,10 @@ class InputSender(AttentionSignaler):
             signaler=get_sender(),
         )
 
+
 class HiddenSignaler(SignalingModule):
-    """The basic building block of 'hidden' layers of a signaling network, consisting of a Compressor unit to get a composite (binary, e.g. "00") signal from the previous layer as input, and a ReceiverSender to send a simple (unary, e.g. "0") signal as output.
-    """
+    """The basic building block of 'hidden' layers of a signaling network, consisting of a Compressor unit to get a composite (binary, e.g. "00") signal from the previous layer as input, and a ReceiverSender to send a simple (unary, e.g. "0") signal as output."""
+
     def __init__(self, input_size: int) -> None:
         self.input_size = input_size
         self.compressor = Compressor(input_size)
@@ -292,10 +352,11 @@ class HiddenSignaler(SignalingModule):
         self.compressor.update(reward_amount)
         self.receiver_sender.update(reward_amount)
 
+
 class OutputReceiver(SignalingModule):
 
-    """The final output agent for a signaling network is a module with a compressor unit to combine two signals, and a receiver to map this composite signal into an act.
-    """
+    """The final output agent for a signaling network is a module with a compressor unit to combine two signals, and a receiver to map this composite signal into an act."""
+
     def __init__(self, input_size: int = 2) -> None:
         """By default input size is 2 for this 'root node' of a binary tree shaped network."""
         self.input_size = input_size
@@ -311,8 +372,8 @@ class OutputReceiver(SignalingModule):
 
 
 ##############################################################################
-# Helper default functions 
-# 
+# Helper default functions
+#
 # for creating the agents typically used
 # in predicting the truth values of boolean sentences with signaling networks
 ##############################################################################
@@ -340,5 +401,57 @@ def get_receiver_sender() -> ReceiverSender:
         sender=get_sender(),
     )
 
+
 def compose(signal_a: Signal, signal_b: Signal) -> Signal:
     return Signal(f"{signal_a.form}{signal_b.form}")
+
+
+def bush_mosteller_reinforce(
+    parameters: np.ndarray, indices: tuple[int], amount: float, **kwargs
+) -> np.ndarray:
+    """Update on policy A according to:
+    prob_new(A) = prob_old(A) + \alpha(1 - prob_old(A))
+    """
+    vector_idx = indices[:-1]  # (possibly empty) first dimension
+    act_idx = indices[-1]  #  last dimension to index within the act vector
+
+    act_vector = parameters[vector_idx]
+
+    if act_vector.sum() != 1.0:
+        raise ValueError(
+            f"The act vector must sum to 1.0 to represent a probability distribution. Value of act vector: {act_vector}. Value of all parameters: {parameters}."
+        )
+
+    if "learning_rate" not in kwargs:
+        raise ValueError(
+            "Bush-Mosteller reinforcement learning requires a learning rate, but none was passed."
+        )
+    prob_old_A = parameters[indices]
+
+    delta = amount *  (1 - prob_old_A)
+    prob_new_A = prob_old_A + delta
+
+    # renormalize remaining parameters until vector sums to one
+    # by decrementing by delta / number of remaining parameters
+    act_vector_new = act_vector - (delta / (len(act_vector) - 1))
+    act_vector_new[act_idx] = prob_new_A
+
+    if act_vector_new.sum() != 1.0:
+        raise ValueError(
+            f"Result of Bush-Mosteller update must result in a policy vector that sums to 1.0. Result was: {act_vector_new}"
+        )
+
+    parameters[vector_idx] = act_vector_new
+
+    return parameters
+
+
+def roth_erev_reinforce(
+    parameters: np.ndarray,
+    indices: tuple[int],
+    amount: float,
+    **kwargs,
+) -> np.ndarray:
+    """Increment the weight (accumulated rewards) of a policy specifed by `indices` by `amount`."""
+    parameters[indices] += amount
+    return parameters

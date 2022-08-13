@@ -5,6 +5,7 @@ from languages import State
 from functools import reduce
 from typing import Any, Callable
 
+
 class SignalTree(SignalingModule):
     """Signaling network for learning functions from lists of states (e.g., truth values of propositions) to states (e.g., the truth value of a complex proposition).
 
@@ -13,9 +14,15 @@ class SignalTree(SignalingModule):
     For the task of predicting the truth values of complex propositional logic sentences from a list of their atoms' truth values, a natural network topology when agents are limited to binary input is the sentence's (binary) syntactic tree representation.
     """
 
-    def __init__(self, input_size: int) -> None:
+    def __init__(
+        self, input_size: int, 
+        parameters: np.ndarray = None, 
+        learner: str = "Bush-Mosteller", 
+        learning_rate: float = 1
+        ) -> None:
         # initialize layers
-        self.agents = build_triangle_network(input_size)
+        super().__init__(learner=learner, learning_rate=learning_rate)        
+        self.agents = build_triangle_network(input_size, learner=learner, learning_rate=learning_rate)
 
         self.input_layer = Layer(self.agents["input"])
         self.hidden_layers = None
@@ -33,13 +40,12 @@ class SignalTree(SignalingModule):
             ]
         )
 
-        super().__init__()
-
     def forward(self, x: list[State]) -> State:
         return self.all_layers(x)
 
     def update(self, reward_amount: float = 0) -> None:
         self.all_layers.update(reward_amount)
+
 
 class Layer(SignalingModule):
     def __init__(self, agents: list[SignalingModule]) -> None:
@@ -68,11 +74,13 @@ class Sequential(SignalingModule):
     def update(self, reward_amount: float = 0) -> None:
         [layer.update(reward_amount) for layer in self.layers]
 
+
 ##############################################################################
 # Utility functions
 ##############################################################################
 
-def build_triangle_network(input_size: int = 2) -> dict[str, list[SignalingModule]]:
+
+def build_triangle_network(input_size: int = 2, **kwargs) -> dict[str, list[SignalingModule]]:
     """Construct a signaling network to have a triangle shape, so that each layer doubles in size moving backwards, starting from the single output agent.
 
     The idea is that the optimal network is a binary tree, corresponding to a the syntactic tree representation of the propositional sentence with the input layer of agents as leaves and the output agent as the root.
@@ -97,6 +105,7 @@ def build_triangle_network(input_size: int = 2) -> dict[str, list[SignalingModul
             f"A signaling network must consist of 2 or more agents. Received input size {input_size}"
         )
 
+    # TODO: give each agent constructor kwargs so i can pass in the above args
     # default network
     agents = {
         "input": [InputSender(input_size) for _ in range(input_size)],
@@ -120,9 +129,10 @@ def build_triangle_network(input_size: int = 2) -> dict[str, list[SignalingModul
 
     return agents
 
+
 def empirical_accuracy(
-    net: SignalTree, 
-    dataset: list[dict[str, Any]], 
+    net: SignalTree,
+    dataset: list[dict[str, Any]],
     num_rounds: int = None,
 ) -> float:
     """
@@ -138,7 +148,7 @@ def empirical_accuracy(
     for _ in range(num_rounds):
         example = np.random.choice(dataset)
 
-        x = list(example["input"]) # copy and shuffle order
+        x = list(example["input"])  # copy and shuffle order
         random.shuffle(x)
 
         y = example["label"]

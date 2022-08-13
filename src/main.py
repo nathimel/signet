@@ -7,6 +7,7 @@ from network import SignalTree, empirical_accuracy
 from tqdm import tqdm
 from game import binary_data, n_ary_data, AND, OR, XOR, NAND, IMPLIES, IFF
 
+
 def main():
     if len(sys.argv) != 2:
         print("Usage: python3 src/main.py path_to_config_file")
@@ -26,23 +27,23 @@ def main():
 
     # define learning problem
     # dataset = binary_data()
-    dataset = n_ary_data(n=input_size, connective=XOR)
+    dataset = n_ary_data(n=input_size, connective=NAND)
 
     # initialize network and parameters
-    net = SignalTree(input_size=input_size)
+    net = SignalTree(input_size=input_size, learning_rate=learning_rate)
 
     accuracy = []
     # main training loop
     for r in tqdm(range(num_rounds)):
         example = np.random.choice(dataset)
 
-        x = list(example["input"]) # copy and shuffle order
+        x = list(example["input"])  # copy and shuffle order
         random.shuffle(x)
 
         y = example["label"]
         y_hat = net(x)
 
-        net.update(reward_amount=int(y == y_hat) * learning_rate)
+        net.update(reward_amount=int(y == y_hat))
 
         acc = empirical_accuracy(net, dataset, num_rounds=100)
         # record accuracy

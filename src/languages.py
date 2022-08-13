@@ -122,13 +122,13 @@ class SignalingLanguage(Language):
         }
         return data
 
+
 ##############################################################################
-# Helper default functions 
-# 
+# Helper default functions
+#
 # for creating the languages typically used
 # in predicting the truth values of boolean sentences with signaling networks
 ##############################################################################
-
 
 
 def get_binary_language() -> SignalingLanguage:
