@@ -1,12 +1,18 @@
 import random
 import numpy as np
-from agents import SignalingModule, InputSender, HiddenSignaler, OutputReceiver
+from agents import (
+    SignalingModule,
+    InputSender,
+    HiddenSignaler,
+    OutputReceiver,
+    Layer,
+    Sequential,
+)
 from languages import State
-from functools import reduce
 from typing import Any, Callable
 
 
-class SignalTree(SignalingModule):
+class SignalTree(Sequential):
     """Signaling network for learning functions from lists of states (e.g., truth values of propositions) to states (e.g., the truth value of a complex proposition).
 
     A SignalTree is a signaling network with one agent as the final output classifier.
@@ -15,64 +21,47 @@ class SignalTree(SignalingModule):
     """
 
     def __init__(
-        self, input_size: int, 
-        parameters: np.ndarray = None, 
-        learner: str = "Bush-Mosteller", 
-        learning_rate: float = 1
-        ) -> None:
-        # initialize layers
-        super().__init__(learner=learner, learning_rate=learning_rate)        
-        self.agents = build_triangle_network(input_size, learner=learner, learning_rate=learning_rate)
+        self,
+        input_size: int,
+        **kwargs,
+    ) -> None:
+        """Construct a signaling network to have a triangle shape, so that each layer doubles in size moving backwards, starting from the single output agent.
 
-        self.input_layer = Layer(self.agents["input"])
-        self.hidden_layers = None
-        if self.agents["hidden"]:
-            self.hidden_layers = Sequential(
-                Layer(layer) for layer in self.agents["hidden"]
+        The idea is that the optimal network is a binary tree, corresponding to a the syntactic tree representation of the propositional sentence with the input layer of agents as leaves and the output agent as the root.
+
+        This may create 'redundant' nodes in hidden layers that would not exist in the minimal syntactic tree representation of a sentence with `input_size` atoms, when `input_size` is an odd number.
+        """
+        if input_size in [0, 1]:
+            raise ValueError(
+                f"A signaling network must consist of 2 or more agents. Received input size {input_size}"
             )
-        (self.output_layer,) = self.agents["output"]
+        # TODO: give each agent constructor kwargs so i can pass in the above args
 
-        self.all_layers = Sequential(
-            [
+        # construct input and output layers
+        input_layer = Layer([InputSender(input_size) for _ in range(input_size)])
+        hidden_layers = []
+        output_layer = OutputReceiver()
+
+        # construct hidden layers
+        layer_sizes = get_layer_sizes(input_size)
+        # remove input and output layers, because we've already constructed them
+        layer_sizes = layer_sizes[1:-1]
+
+        if layer_sizes:
+            # populate each hidden layer with agents
+            hidden_layers = Sequential(
+                [
+                    Layer([HiddenSignaler(size) for _ in range(size)])
+                    for size in layer_sizes
+                ]
+            )
+        super().__init__(
+            layers=[
                 layer
-                for layer in [self.input_layer, self.hidden_layers, self.output_layer]
+                for layer in [input_layer, hidden_layers, output_layer]
                 if layer is not None
             ]
         )
-
-    def forward(self, x: list[State]) -> State:
-        return self.all_layers(x)
-
-    def update(self, reward_amount: float = 0) -> None:
-        self.all_layers.update(reward_amount)
-
-
-class Layer(SignalingModule):
-    def __init__(self, agents: list[SignalingModule]) -> None:
-        self.agents = agents
-
-    def forward(self, x) -> Any:
-        return [agent(x) for agent in self.agents]
-
-    def update(self, reward_amount: float = 0) -> None:
-        [agent.update(reward_amount) for agent in self.agents]
-
-
-class Sequential(SignalingModule):
-    """Constructs a module consisting of the result of a list of layers applied to each other in order using `reduce`."""
-
-    def __init__(self, layers: list[Layer]) -> None:
-        self.layers = layers
-
-    def forward(self, x) -> Any:
-        return reduce(
-            lambda res, f: f(res),
-            [layer for layer in self.layers],
-            x,
-        )
-
-    def update(self, reward_amount: float = 0) -> None:
-        [layer.update(reward_amount) for layer in self.layers]
 
 
 ##############################################################################
@@ -80,7 +69,9 @@ class Sequential(SignalingModule):
 ##############################################################################
 
 
-def build_triangle_network(input_size: int = 2, **kwargs) -> dict[str, list[SignalingModule]]:
+def build_triangle_network(
+    input_size: int = 2, **kwargs
+) -> dict[str, list[SignalingModule]]:
     """Construct a signaling network to have a triangle shape, so that each layer doubles in size moving backwards, starting from the single output agent.
 
     The idea is that the optimal network is a binary tree, corresponding to a the syntactic tree representation of the propositional sentence with the input layer of agents as leaves and the output agent as the root.
@@ -91,13 +82,7 @@ def build_triangle_network(input_size: int = 2, **kwargs) -> dict[str, list[Sign
         input_size: the size of the input layer of the network, e.g., the number of propositional atoms of the complex sentence to predict the truth value of.
 
     Returns:
-
-        agents: a dict containing the levels of the binary tree, corresponding to layers of the signaling network. Of the form
-            {
-                "input": (list of agents),
-                "hidden": (list of lists of agents),
-                "output": (one agent),
-            }
+        layers: a list of signaling network layers consisting of an input layer, an optional Sequential layer of hidden layers, and one output agent.
     """
 
     if input_size in [0, 1]:
@@ -107,27 +92,27 @@ def build_triangle_network(input_size: int = 2, **kwargs) -> dict[str, list[Sign
 
     # TODO: give each agent constructor kwargs so i can pass in the above args
     # default network
-    agents = {
-        "input": [InputSender(input_size) for _ in range(input_size)],
-        "hidden": [],
-        "output": [OutputReceiver()],
-    }
 
-    # create a list of the sizes of each hidden layer
-    layer_sizes = list(
-        reversed([2**j for j in range(0, int(np.ceil(np.log2(input_size))) + 1)])
-    )
+    input_layer = Layer([InputSender(input_size) for _ in range(input_size)])
+    hidden_layers = []
+    output_layer = OutputReceiver()
+
+    layer_sizes = get_layer_sizes()
     # remove input and output layers
-    layer_sizes.pop(-1)
-    layer_sizes.pop(0)
+    layer_sizes = layer_sizes[1:-1]
 
     if layer_sizes:
         # populate each hidden layer with agents
-        agents["hidden"] = [
-            [HiddenSignaler(size) for _ in range(size)] for size in layer_sizes
-        ]
+        hidden_layers = Sequential(
+            [Layer([HiddenSignaler(size) for _ in range(size)]) for size in layer_sizes]
+        )
 
-    return agents
+    layers = [
+        layer
+        for layer in [input_layer, hidden_layers, output_layer]
+        if layer is not None
+    ]
+    return layers
 
 
 def empirical_accuracy(
@@ -141,6 +126,8 @@ def empirical_accuracy(
     Args:
         num_rounds: an int representing how many interactions to record.
     """
+    # net.test()
+
     if num_rounds is None:
         num_rounds = len(dataset)
 
@@ -155,6 +142,29 @@ def empirical_accuracy(
         y_hat = net(x)
 
         num_correct += 1 if y_hat == y else 0
-        net.update()
+        net.update(reward_amount=0)
 
+    # net.train()
     return num_correct / num_rounds
+
+
+def get_layer_sizes(input_size: int, topology: str = "binary-tree") -> list[int]:
+    """Given an input size, construct a list containing the size of each layer of a network for mapping the input size to a singular output. By default constructs a binary tree graph topology.
+
+    Args:
+        input_size: the size of the input layer, corresponding to the length of a boolean formula in atoms, and the number of leaf nodes of the syntactic tree.
+
+        topology: the network topology to construct. For mapping arbitary input sizes to a singular output, the shape must be a bottleneck, but in principle it may have a very long 'neck'.
+    """
+    if topology == "binary-tree":
+
+        # create a list of the sizes of each hidden layer
+        layer_sizes = list(
+            reversed([2**j for j in range(0, int(np.ceil(np.log2(input_size))) + 1)])
+        )
+    else:
+        raise ValueError(
+            "Cannot support additional network topologies. Please construct a binary tree network."
+        )
+
+    return layer_sizes

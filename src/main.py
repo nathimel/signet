@@ -28,12 +28,12 @@ def main():
 
     # define learning problem
     # dataset = binary_data()
-    dataset = n_ary_data(n=input_size, connective=AND)
+    dataset = n_ary_data(n=input_size, connective=NAND)
 
     # initialize network and parameters
-    # net = SignalTree(input_size=input_size, learning_rate=learning_rate)
+    net = SignalTree(input_size=input_size, learning_rate=learning_rate)
     # net = Random()
-    net = Bottom()
+    # net = Bottom()
 
     accuracy = []
     # main training loop
@@ -46,9 +46,11 @@ def main():
         y = example["label"]
         y_hat = net(x)
 
+        # print(f"train mode set to {net.train_mode}")
         net.update(reward_amount=int(y == y_hat))
 
-        acc = empirical_accuracy(net, dataset, num_rounds=100)
+        # acc = empirical_accuracy(net, dataset, num_rounds=100)
+        acc = 0
         # record accuracy
         if r % 10 == 0:
             print(f"Accuracy on round {r}: {round(acc, 2)}")

@@ -1,3 +1,4 @@
+from importlib.util import LazyLoader
 import random
 import numpy as np
 from abc import abstractmethod
@@ -11,6 +12,7 @@ from languages import (
     get_binary_language,
     get_quaternary_language,
 )
+from functools import reduce
 from typing import Any, Union
 
 ##############################################################################
@@ -137,11 +139,11 @@ class SignalingModule:
     def forward(self, x) -> Any:
         raise NotImplementedError
 
-    def update(self, reward_amount: float = 0) -> None:
+    def update(self, reward_amount: float) -> None:
         """Perform a learning update on the module, by optionally rewarding based on the last policy taken, and clearing the policy history for the next forward pass."""
-        if reward_amount:
+        if self.train_mode:
             self.reward(amount=self.learning_rate * reward_amount)
-        self.reset_history()
+        # self.reset_history()
 
     def reward(self, amount: float) -> None:
 
@@ -174,6 +176,54 @@ class SignalingModule:
         self.train_mode = False
 
 
+class Layer(SignalingModule):
+    """A layer is a list of agents that can act as one composite agent."""
+
+    def __init__(self, agents: list[SignalingModule]) -> None:
+        self.agents = agents
+
+    def forward(self, x) -> Any:
+        return [agent(x) for agent in self.agents]
+
+    def update(self, reward_amount: float) -> None:
+        [agent.update(reward_amount) for agent in self.agents]
+
+    def train(self) -> None:
+        [agent.train() for agent in self.agents]
+
+    def test(self) -> None:
+        [agent.test() for agent in self.agents]
+
+
+class Sequential(SignalingModule):
+    """Constructs a module consisting of the result of a list of layers applied to each other in order using `reduce`."""
+
+    def __init__(self, layers: list[Layer]) -> None:
+        """Take a list of layers of agents to compose."""
+        self.layers = layers
+
+    def forward(self, x) -> Any:
+        return reduce(
+            lambda res, f: f(res),
+            [layer for layer in self.layers],
+            x,
+        )
+
+    def update(self, reward_amount: float) -> None:
+        [layer.update(reward_amount) for layer in self.layers]
+
+    def train(self) -> None:
+        [layer.train() for layer in self.layers]
+
+    def test(self) -> None:
+        [layer.test() for layer in self.layers]
+
+
+##############################################################################
+# Actual signalers
+##############################################################################
+
+
 class SenderModule(SignalingModule):
     """Basic Sender wrapped in SignalingModule."""
 
@@ -183,7 +233,8 @@ class SenderModule(SignalingModule):
 
     def forward(self, x: State) -> Signal:
         signal = self.sender.encode(x)
-        self.history.append({"referent": x, "expression": signal})
+        if self.train_mode:
+            self.history.append({"referent": x, "expression": signal})
         return signal
 
     def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
@@ -199,7 +250,8 @@ class ReceiverModule(SignalingModule):
 
     def forward(self, x: Signal) -> State:
         state = self.receiver.decode(signal=x)
-        self.history.append({"referent": state, "expression": x})
+        if self.train_mode:
+            self.history.append({"referent": state, "expression": x})
         return state
 
     def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
@@ -209,7 +261,7 @@ class ReceiverModule(SignalingModule):
 """Composite modules only need to store their sub-agents, and call the forward and reward api of these sub-agents. These agents are assumed to be already instantiated, which means that their required and optional parameters should have been set, and now their internal parameters shouldn't be touched."""
 
 
-class ReceiverSender(SignalingModule):
+class ReceiverSender(Sequential):
     def __init__(
         self,
         receiver: ReceiverModule,
@@ -225,15 +277,23 @@ class ReceiverSender(SignalingModule):
         self.receiver = receiver
         self.sender = sender
         self.name = name
-        super().__init__()
+        super().__init__(layers=[self.receiver, self.sender])
 
-    def forward(self, x: Signal) -> Signal:
-        # no need to touch `history`
-        return self.sender(self.receiver(x))
+    # def forward(self, x: Signal) -> Signal:
+    #     # no need to touch `history`
+    #     return self.sender(self.receiver(x))
 
-    def update(self, reward_amount: float = 0) -> None:
-        self.receiver.update(reward_amount)
-        self.sender.update(reward_amount)
+    # def update(self, reward_amount: float) -> None:
+    #     self.receiver.update(reward_amount)
+    #     self.sender.update(reward_amount)
+
+    # def train(self) -> None:
+    #     self.receiver.train()
+    #     self.sender.train()
+
+    # def test(self) -> None:
+    #     self.receiver.test()
+    #     self.sender.test()
 
 
 class AttentionAgent(SignalingModule):
@@ -245,6 +305,9 @@ class AttentionAgent(SignalingModule):
         super().__init__(parameters=np.ones(self.input_size))
 
     def forward(self, x: list[Any]) -> Any:
+        # if not self.train_mode:
+        # print("in test mode and sampling input with history: ")
+        # print(self.history)
         return self.sample_input(x)
 
     def sample_input(self, x: list[Any]) -> Any:
@@ -259,8 +322,9 @@ class AttentionAgent(SignalingModule):
             raise ValueError(
                 f"The length of history before pushing a policy should be empty. Check that update() was called. The value of history: {self.history}"
             )
-
-        self.history.append({"index": index})
+        if self.train_mode:
+            # print("pushing a policy")
+            self.history.append({"index": index})
 
         return output
 
@@ -269,7 +333,7 @@ class AttentionAgent(SignalingModule):
         return tuple([policy["index"]])
 
 
-class AttentionSignaler(SignalingModule):
+class AttentionSignaler(Sequential):
     """An AttentionSignaler module takes a complex input of signals or states, uses its attention layer to sample one of the elements, and passes the result to a signaler (either a SenderModule or ReceiverModule), and returns the resulting signaler's output."""
 
     def __init__(
@@ -279,17 +343,25 @@ class AttentionSignaler(SignalingModule):
     ) -> None:
         self.attention_layer = attention_layer
         self.signaler = signaler
-        super().__init__()
+        super().__init__(layers=[self.attention_layer, self.signaler])
 
-    def forward(self, x: list[Any]) -> Any:
-        return self.signaler(self.attention_layer(x))
+    # def forward(self, x: list[Any]) -> Any:
+    #     return self.signaler(self.attention_layer(x))
 
-    def update(self, reward_amount: float = 0) -> None:
-        self.attention_layer.update(reward_amount)
-        self.signaler.update(reward_amount)
+    # def update(self, reward_amount: float = 0) -> None:
+    #     self.attention_layer.update(reward_amount)
+    #     self.signaler.update(reward_amount)
+
+    # def train(self) -> None:
+    #     self.attention_layer.train()
+    #     self.signaler.train()
+
+    # def test(self) -> None:
+    #     self.attention_layer.test()
+    #     self.signaler.test()
 
 
-class Compressor(SignalingModule):
+class Compressor(Sequential):
     """A Compressor module is a unit with two attention heads. It takes a list of signals as input, chooses two and combines them (as one of four possible combinations). This composite signal can become input to another agent.
 
     The Compressor is named so because it can compress an arbitrarily large input space to a single output, by sampling a pair of inputs and combining them.
@@ -312,17 +384,26 @@ class Compressor(SignalingModule):
         self.input_size = input_size
         self.attention_1 = AttentionAgent(self.input_size)  # shape (input_size, 1)
         self.attention_2 = AttentionAgent(self.input_size)  # shape (input_size, 1)
-        super().__init__()
+        super().__init__(layers=[self.attention_1, self.attention_2])
 
     def forward(self, x: list[Signal]) -> Signal:
+        # print("input to compressor forward: ", x)
         return compose(
             self.attention_1(x),
             self.attention_2(x),
         )
 
-    def update(self, reward_amount: float = 0) -> None:
-        self.attention_1.update(reward_amount)
-        self.attention_2.update(reward_amount)
+    # def update(self, reward_amount: float = 0) -> None:
+    #     self.attention_1.update(reward_amount)
+    #     self.attention_2.update(reward_amount)
+
+    # def train(self) -> None:
+    #     self.attention_1.train()
+    #     self.attention_2.train()
+
+    # def train(self) -> None:
+    #     self.attention_1.test()
+    #     self.attention_2.test()
 
 
 ##############################################################################
@@ -337,24 +418,38 @@ class InputSender(AttentionSignaler):
             signaler=get_sender(),
         )
 
+    def forward(self, x: list[State]) -> Signal:
+        print("Input sender forward called.")
+        return super().forward(x)
 
-class HiddenSignaler(SignalingModule):
+
+class HiddenSignaler(Sequential):
     """The basic building block of 'hidden' layers of a signaling network, consisting of a Compressor unit to get a composite (binary, e.g. "00") signal from the previous layer as input, and a ReceiverSender to send a simple (unary, e.g. "0") signal as output."""
 
     def __init__(self, input_size: int) -> None:
         self.input_size = input_size
         self.compressor = Compressor(input_size)
         self.receiver_sender = get_receiver_sender()
+        super().__init__(layers=[self.compressor, self.receiver_sender])
 
     def forward(self, x) -> Any:
-        return self.receiver_sender(self.compressor(x))
+        print("hidden signaler forward called")
+        return super().forward(x)
 
-    def update(self, reward_amount: float = 0) -> None:
-        self.compressor.update(reward_amount)
-        self.receiver_sender.update(reward_amount)
+    # def update(self, reward_amount: float = 0) -> None:
+    #     self.compressor.update(reward_amount)
+    #     self.receiver_sender.update(reward_amount)
+
+    # def train(self) -> None:
+    #     self.compressor.train()
+    #     self.receiver_sender.train()
+
+    # def test(self) -> None:
+    #     self.compressor.test()
+    #     self.receiver_sender.test()
 
 
-class OutputReceiver(SignalingModule):
+class OutputReceiver(Sequential):
 
     """The final output agent for a signaling network is a module with a compressor unit to combine two signals, and a receiver to map this composite signal into an act."""
 
@@ -363,18 +458,30 @@ class OutputReceiver(SignalingModule):
         self.input_size = input_size
         self.compressor = Compressor(input_size)
         self.receiver = get_quaternary_receiver()
+        super().__init__(layers=[self.compressor, self.receiver])
 
     def forward(self, x) -> Any:
-        return self.receiver(self.compressor(x))
+        print("output receiver forward called.")
+        return super().forward(x)
+    #     return self.receiver(self.compressor(x))
 
-    def update(self, reward_amount: float = 0) -> None:
-        self.compressor.update(reward_amount)
-        self.receiver.update(reward_amount)
+    # def update(self, reward_amount: float) -> None:
+    #     self.compressor.update(reward_amount)
+    #     self.receiver.update(reward_amount)
+
+    # def train(self) -> None:
+    #     self.compressor.train()
+    #     self.receiver.train()
+
+    # def test(self) -> None:
+    #     self.compressor.test()
+    #     self.receiver.test()
 
 
 ##############################################################################
 # Baseline agents
 ##############################################################################
+
 
 class Baseline(SignalingModule):
     """Baseline module that does not learn."""
@@ -382,18 +489,24 @@ class Baseline(SignalingModule):
     def update(self, reward_amount: float = 0) -> None:
         pass
 
+
 class Bottom(Baseline):
     """Always returns 0."""
+
     def forward(self, x) -> State:
         return State(name="0")
 
+
 class Top(Baseline):
     """Always returns 1."""
+
     def forward(self, x) -> State:
         return State(name="1")
 
+
 class Random(Baseline):
     """Randomly return a state."""
+
     def forward(self, x) -> State:
         return random.choice([State(name="0"), State(name="1")])
 
@@ -455,7 +568,7 @@ def bush_mosteller_reinforce(
         )
     prob_old_A = parameters[indices]
 
-    delta = amount *  (1 - prob_old_A)
+    delta = amount * (1 - prob_old_A)
     prob_new_A = prob_old_A + delta
 
     # renormalize remaining parameters until vector sums to one
