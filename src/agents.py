@@ -9,10 +9,12 @@ from languages import (
     SignalingLanguage,
     State,
     get_binary_language,
-    get_quaternary_language,
+    get_four_state_two_signal_language,
+    get_two_state_four_signal_language,
 )
 from functools import reduce
 from typing import Any, Union
+
 
 ##############################################################################
 # Basic signaling agent wrappers for ALTK agents
@@ -82,8 +84,9 @@ class SignalingModule:
     def __init__(
         self,
         parameters: np.ndarray = None,
-        learner: str = "Bush-Mosteller",
+        learner: str = "Roth-Erev",
         learning_rate: float = 1.0,
+        name: str = None,
     ) -> None:
         """The base constructor for a signaling module used to build signaling networks.
 
@@ -97,9 +100,11 @@ class SignalingModule:
         self.history = []
         self.parameters = parameters
         self.learning_rate = learning_rate
+        self.name = name
 
         # In training mode or not / whether to update parameters
         self.train_mode = True
+        self.frozen = False
 
         if learner == "Roth-Erev":
             # assign reward func
@@ -152,9 +157,10 @@ class SignalingModule:
 
         policy = self.history.pop()
         indices = self.policy_to_indices(policy)
-        self.parameters = self.reward_func(
-            self.parameters, indices, amount, learning_rate=self.learning_rate
-        )
+        if not self.frozen:
+            self.parameters = self.reward_func(
+                self.parameters, indices, amount, learning_rate=self.learning_rate
+            )
 
     def reset_history(self) -> None:
         """Call this function after every forward pass through a module, whether it was rewarded or not."""
@@ -167,11 +173,25 @@ class SignalingModule:
 
     def train(self) -> None:
         """Set module to training mode."""
+        # if self.frozen:
+        # raise Exception("Parameters frozen but tried to train.")
         self.train_mode = True
 
     def test(self) -> None:
         """Set module to testing mode."""
         self.train_mode = False
+
+    def freeze(self) -> None:
+        """Freeze parameters to not be updated by blocking `train`."""
+        self.frozen = True
+
+    def unfreeze(self) -> None:
+        """Unfreeze parameters to be updated by `train`."""
+        self.frozen = False
+
+    def to_language(self, **kwargs) -> SignalingLanguage:
+        """Return the learned 'language', e.g. pairing of signals and states, for an agent, if they are a communicative agent."""
+        raise NotImplementedError
 
 
 class Layer(SignalingModule):
@@ -191,6 +211,15 @@ class Layer(SignalingModule):
 
     def test(self) -> None:
         [agent.test() for agent in self.agents]
+
+    def freeze(self) -> None:
+        [agent.freeze() for agent in self.agents]
+
+    def unfreeze(self) -> None:
+        [agent.unfreeze() for agent in self.agents]
+
+    def to_language(self, **kwargs) -> SignalingLanguage:
+        return [agent.to_language(**kwargs) for agent in self.agents]
 
 
 class Sequential(SignalingModule):
@@ -216,6 +245,15 @@ class Sequential(SignalingModule):
     def test(self) -> None:
         [layer.test() for layer in self.layers]
 
+    def freeze(self) -> None:
+        [layer.freeze() for layer in self.layers]
+
+    def unfreeze(self) -> None:
+        [layer.unfreeze() for layer in self.layers]
+
+    def to_language(self, **kwargs) -> SignalingLanguage:
+        return [layer.to_language(**kwargs) for layer in self.layers]
+
 
 ##############################################################################
 # Actual signalers
@@ -238,6 +276,9 @@ class SenderModule(SignalingModule):
     def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
         return self.sender.policy_to_indices(policy)
 
+    def to_language(self, **kwargs) -> SignalingLanguage:
+        return self.sender.to_language(**kwargs)
+
 
 class ReceiverModule(SignalingModule):
     """Basic Receiver wrapped in SignalingModule."""
@@ -254,6 +295,14 @@ class ReceiverModule(SignalingModule):
 
     def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
         return self.receiver.policy_to_indices(policy)
+
+    def to_language(self, **kwargs) -> SignalingLanguage:
+        return self.receiver.to_language(**kwargs)
+
+# sanity check
+class SSRReceiver(ReceiverModule):
+    def forward(self, x: list[Signal]) -> State:
+        return super().forward(x=compose(*x))
 
 
 """Composite modules only need to store their sub-agents, and call the forward and reward api of these sub-agents. These agents are assumed to be already instantiated, which means that their required and optional parameters should have been set, and now their internal parameters shouldn't be touched."""
@@ -313,6 +362,11 @@ class AttentionAgent(SignalingModule):
     def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
         # a singleton tuple
         return tuple([policy["index"]])
+
+    def to_language(self, **kwargs) -> SignalingLanguage:
+        """An attention agent is not communicative."""
+        # yet
+        return None
 
 
 class AttentionSignaler(Sequential):
@@ -374,7 +428,7 @@ class InputSender(AttentionSignaler):
         )
 
     def forward(self, x: list[State]) -> Signal:
-        print("Input sender forward called.")
+        # print("Input sender forward called.")
         return super().forward(x)
 
 
@@ -388,7 +442,7 @@ class HiddenSignaler(Sequential):
         super().__init__(layers=[self.compressor, self.receiver_sender])
 
     def forward(self, x) -> Any:
-        print("hidden signaler forward called")
+        # print("hidden signaler forward called")
         return super().forward(x)
 
 
@@ -404,7 +458,7 @@ class OutputReceiver(Sequential):
         super().__init__(layers=[self.compressor, self.receiver])
 
     def forward(self, x) -> Any:
-        print("output receiver forward called.")
+        # print("output receiver forward called.")
         return super().forward(x)
 
 
@@ -460,8 +514,18 @@ def get_receiver() -> ReceiverModule:
 
 
 def get_quaternary_receiver() -> ReceiverModule:
-    """Get a 4 signal, 2 state ReceiverModule instsance initialized for boolean games."""
-    return ReceiverModule(receiver=Receiver(language=get_quaternary_language()))
+    """Get a 4 signal, 2 state ReceiverModule instance initialized for boolean games."""
+    return ReceiverModule(
+        receiver=Receiver(language=get_two_state_four_signal_language())
+    )
+
+def get_ssr_receiver() -> SSRReceiver:
+    return SSRReceiver(receiver=Receiver(language=get_two_state_four_signal_language()))
+
+def get_quaternary_sender() -> ReceiverModule:
+    """Get a 4 state, 2 signal ReceiverModule instance initialized for boolean games."""
+    return SenderModule(sender=Sender(language=get_four_state_two_signal_language()))
+
 
 
 def get_receiver_sender() -> ReceiverSender:

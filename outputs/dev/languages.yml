@@ -1,0 +1,37 @@
+languages:
+- Sender A:
+    data:
+      name: Sender A
+    expressions:
+    - form: '0'
+      meaning: []
+    - form: '1'
+      meaning:
+      - '0'
+      - '1'
+- Sender B:
+    data:
+      name: Sender B
+    expressions:
+    - form: '0'
+      meaning: []
+    - form: '1'
+      meaning:
+      - '0'
+      - '1'
+- Receiver:
+    data:
+      name: Receiver
+    expressions:
+    - form: '00'
+      meaning:
+      - '0'
+    - form: '01'
+      meaning:
+      - '0'
+    - form: '10'
+      meaning:
+      - '0'
+    - form: '11'
+      meaning:
+      - '0'

@@ -151,7 +151,7 @@ def get_binary_language() -> SignalingLanguage:
     )
 
 
-def get_quaternary_language() -> SignalingLanguage:
+def get_two_state_four_signal_language() -> SignalingLanguage:
     """Get a 2 state, 4 signal SignalingLanguage instance initialized for boolean games."""
     states = [State(name="0"), State(name="1")]
     universe = StateSpace(states)
@@ -164,6 +164,24 @@ def get_quaternary_language() -> SignalingLanguage:
         Signal(form="01", meaning=dummy_meaning),
         Signal(form="10", meaning=dummy_meaning),
         Signal(form="11", meaning=dummy_meaning),
+    ]
+
+    return SignalingLanguage(
+        signals=signals,
+    )
+
+
+def get_four_state_two_signal_language() -> SignalingLanguage:
+    """Get a 2 state, 4 signal SignalingLanguage instance initialized for boolean games."""
+    states = [State(name="00"), State("01"), State("10"), State(name="11")]
+    universe = StateSpace(states)
+    dummy_meaning = SignalMeaning(
+        states=states,
+        universe=universe,
+    )
+    signals = [
+        Signal(form="0", meaning=dummy_meaning),
+        Signal(form="1", meaning=dummy_meaning),
     ]
 
     return SignalingLanguage(

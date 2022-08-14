@@ -11,6 +11,7 @@ from agents import (
 from languages import State
 from typing import Any, Callable
 
+from agents import get_quaternary_sender, get_ssr_receiver
 
 class SignalTree(Sequential):
     """Signaling network for learning functions from lists of states (e.g., truth values of propositions) to states (e.g., the truth value of a complex proposition).
@@ -59,9 +60,46 @@ class SignalTree(Sequential):
             layers=[
                 layer
                 for layer in [input_layer, hidden_layers, output_layer]
-                if layer is not None
+                if layer  # possibly empty list of hidden layers
             ]
         )
+
+
+# define baseline SSR net
+
+
+def get_optimal_ssr() -> SignalTree:
+    """Hard code parameters of a Sequential module identical to a size 2 SignalTree."""
+
+    # # hard code the attention params of InputSenders
+    attn_a = np.array([1.0, 0.0])  # always look at first state
+    # sender_a.attention_layer.parameters = attn_a
+
+    attn_b = np.array([0.0, 1.0])  # always look at second state
+    # sender_b.attention_layer.parameters = attn_b
+
+    # hard code the attention params of OutputReceiver
+    attn_1 = attn_a  # first signal always from first sender
+    attn_2 = attn_b  # second signal always from second sender
+
+    # receiver.compressor.attention_1.parameters = attn_1
+    # receiver.compressor.attention_2.parameters = attn_2
+
+    # freeze these params only
+    # sender_a.attention_layer.freeze()
+    # sender_b.attention_layer.freeze()
+    # receiver.compressor.freeze()
+
+
+    sender_a = get_quaternary_sender()
+    sender_b = get_quaternary_sender()
+    sender_layer = Layer(agents=[sender_a, sender_b])
+    receiver = get_ssr_receiver()
+    net = Sequential(
+        layers=[sender_layer, receiver]
+    )
+
+    return net
 
 
 ##############################################################################
@@ -126,7 +164,7 @@ def empirical_accuracy(
     Args:
         num_rounds: an int representing how many interactions to record.
     """
-    # net.test()
+    net.test()
 
     if num_rounds is None:
         num_rounds = len(dataset)
@@ -135,16 +173,17 @@ def empirical_accuracy(
     for _ in range(num_rounds):
         example = np.random.choice(dataset)
 
-        x = list(example["input"])  # copy and shuffle order
-        random.shuffle(x)
+        x = example["input"]
+        # x = list(example["input"])  # copy and shuffle order
+        # random.shuffle(x)
 
         y = example["label"]
         y_hat = net(x)
 
         num_correct += 1 if y_hat == y else 0
-        net.update(reward_amount=0)
+        # net.update(reward_amount=0)
 
-    # net.train()
+    net.train()
     return num_correct / num_rounds
 
 

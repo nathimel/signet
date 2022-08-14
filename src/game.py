@@ -71,6 +71,19 @@ def generate_data(sentence: str = "p and q") -> list[dict[str, State]]:
     return examples
 
 
+def get_ssr_data(
+    f: Callable[[bool, bool], bool] = lambda x, y: x and y
+) -> list[dict[str, State]]:
+    examples = []
+    for p, q in product([True, False], [True, False]):
+        example = {  # we join the states instead of passing a list
+            "input": State("".join([str(int(p)), str(int(q))])),
+            "label": State(str(int(f(p, q)))),
+        }
+        examples.append(example)
+    return examples
+
+
 def n_ary_data(n: int, connective: Callable[[bool, bool], bool] = lambda x, y: x and y):
     f = lambda inputs: reduce(connective, inputs)
     examples = []
