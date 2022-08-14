@@ -1,8 +1,7 @@
-from importlib.util import LazyLoader
 import random
 import numpy as np
 from abc import abstractmethod
-from altk.effcomm.agent import CommunicativeAgent, Speaker, Listener
+from altk.effcomm.agent import Speaker, Listener
 from altk.language.semantics import Meaning
 from languages import (
     Signal,
@@ -143,7 +142,6 @@ class SignalingModule:
         """Perform a learning update on the module, by optionally rewarding based on the last policy taken, and clearing the policy history for the next forward pass."""
         if self.train_mode:
             self.reward(amount=self.learning_rate * reward_amount)
-        # self.reset_history()
 
     def reward(self, amount: float) -> None:
 
@@ -279,22 +277,6 @@ class ReceiverSender(Sequential):
         self.name = name
         super().__init__(layers=[self.receiver, self.sender])
 
-    # def forward(self, x: Signal) -> Signal:
-    #     # no need to touch `history`
-    #     return self.sender(self.receiver(x))
-
-    # def update(self, reward_amount: float) -> None:
-    #     self.receiver.update(reward_amount)
-    #     self.sender.update(reward_amount)
-
-    # def train(self) -> None:
-    #     self.receiver.train()
-    #     self.sender.train()
-
-    # def test(self) -> None:
-    #     self.receiver.test()
-    #     self.sender.test()
-
 
 class AttentionAgent(SignalingModule):
     """An AttentionAgent implements a simple form of attention by sampling a single element of a many-element input (a list of signals or states). The probability of sampling a given element of the total input evolves under simple reinforcement learning."""
@@ -345,21 +327,6 @@ class AttentionSignaler(Sequential):
         self.signaler = signaler
         super().__init__(layers=[self.attention_layer, self.signaler])
 
-    # def forward(self, x: list[Any]) -> Any:
-    #     return self.signaler(self.attention_layer(x))
-
-    # def update(self, reward_amount: float = 0) -> None:
-    #     self.attention_layer.update(reward_amount)
-    #     self.signaler.update(reward_amount)
-
-    # def train(self) -> None:
-    #     self.attention_layer.train()
-    #     self.signaler.train()
-
-    # def test(self) -> None:
-    #     self.attention_layer.test()
-    #     self.signaler.test()
-
 
 class Compressor(Sequential):
     """A Compressor module is a unit with two attention heads. It takes a list of signals as input, chooses two and combines them (as one of four possible combinations). This composite signal can become input to another agent.
@@ -393,18 +360,6 @@ class Compressor(Sequential):
             self.attention_2(x),
         )
 
-    # def update(self, reward_amount: float = 0) -> None:
-    #     self.attention_1.update(reward_amount)
-    #     self.attention_2.update(reward_amount)
-
-    # def train(self) -> None:
-    #     self.attention_1.train()
-    #     self.attention_2.train()
-
-    # def train(self) -> None:
-    #     self.attention_1.test()
-    #     self.attention_2.test()
-
 
 ##############################################################################
 # Main game agents
@@ -436,18 +391,6 @@ class HiddenSignaler(Sequential):
         print("hidden signaler forward called")
         return super().forward(x)
 
-    # def update(self, reward_amount: float = 0) -> None:
-    #     self.compressor.update(reward_amount)
-    #     self.receiver_sender.update(reward_amount)
-
-    # def train(self) -> None:
-    #     self.compressor.train()
-    #     self.receiver_sender.train()
-
-    # def test(self) -> None:
-    #     self.compressor.test()
-    #     self.receiver_sender.test()
-
 
 class OutputReceiver(Sequential):
 
@@ -463,19 +406,6 @@ class OutputReceiver(Sequential):
     def forward(self, x) -> Any:
         print("output receiver forward called.")
         return super().forward(x)
-    #     return self.receiver(self.compressor(x))
-
-    # def update(self, reward_amount: float) -> None:
-    #     self.compressor.update(reward_amount)
-    #     self.receiver.update(reward_amount)
-
-    # def train(self) -> None:
-    #     self.compressor.train()
-    #     self.receiver.train()
-
-    # def test(self) -> None:
-    #     self.compressor.test()
-    #     self.receiver.test()
 
 
 ##############################################################################
