@@ -1,12 +1,22 @@
-"""File for creating the default agents, languages, and other data structures used in for predicting the truth values of boolean sentences with signaling networks."""
-
-import numpy as np
-
+"""Functions for data generating used for boolean games."""
 from languages import State
 from itertools import product
-from typing import Any, Callable
+from typing import Callable
 from functools import reduce
 
+from agents.basic import (
+    Receiver,
+    ReceiverModule,
+    ReceiverSender,
+    SSRReceiver,
+    Sender,
+    SenderModule,
+)
+from languages import (
+    get_binary_language,
+    get_four_state_two_signal_language,
+    get_two_state_four_signal_language,
+)
 
 ##############################################################################
 # Data
@@ -118,3 +128,45 @@ def binary_data(
         }
         examples.append(example)
     return examples
+
+
+##############################################################################
+# Helper default functions
+#
+# for creating the agents typically used
+# in predicting the truth values of boolean sentences with signaling networks
+##############################################################################
+
+
+def get_sender() -> SenderModule:
+    """Get a 2 state, 2 signal SenderModule instance initialized for boolean games."""
+    return SenderModule(sender=Sender(language=get_binary_language()))
+
+
+def get_receiver() -> ReceiverModule:
+    """Get a ReceiverModule instance initialized for boolean games."""
+    return ReceiverModule(receiver=Receiver(language=get_binary_language()))
+
+
+def get_quaternary_receiver() -> ReceiverModule:
+    """Get a 4 signal, 2 state ReceiverModule instance initialized for boolean games."""
+    return ReceiverModule(
+        receiver=Receiver(language=get_two_state_four_signal_language())
+    )
+
+
+def get_ssr_receiver() -> SSRReceiver:
+    return SSRReceiver(receiver=Receiver(language=get_two_state_four_signal_language()))
+
+
+def get_quaternary_sender() -> ReceiverModule:
+    """Get a 4 state, 2 signal ReceiverModule instance initialized for boolean games."""
+    return SenderModule(sender=Sender(language=get_four_state_two_signal_language()))
+
+
+def get_receiver_sender() -> ReceiverSender:
+    """Get a ReceiverSender instance initialized for boolean games."""
+    return ReceiverSender(
+        receiver=get_quaternary_receiver(),
+        sender=get_sender(),
+    )

@@ -4,34 +4,38 @@ languages:
       name: Sender A
     expressions:
     - form: '0'
-      meaning: []
+      meaning:
+      - '01'
+      - '10'
     - form: '1'
       meaning:
-      - '0'
-      - '1'
+      - '00'
+      - '11'
 - Sender B:
     data:
       name: Sender B
     expressions:
     - form: '0'
-      meaning: []
+      meaning:
+      - '00'
+      - '11'
     - form: '1'
       meaning:
-      - '0'
-      - '1'
+      - '01'
+      - '10'
 - Receiver:
     data:
       name: Receiver
     expressions:
     - form: '00'
       meaning:
-      - '0'
+      - '1'
     - form: '01'
       meaning:
-      - '0'
+      - '1'
     - form: '10'
       meaning:
       - '0'
     - form: '11'
       meaning:
-      - '0'
+      - '1'

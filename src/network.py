@@ -1,17 +1,26 @@
 import random
 import numpy as np
-from agents import (
+from agents.module import (
     SignalingModule,
-    InputSender,
-    HiddenSignaler,
-    OutputReceiver,
     Layer,
     Sequential,
 )
-from languages import State
+from agents.basic import (
+    AttentionAgent,
+    AttentionSignaler,
+    Compressor,
+)
+from languages import State, Signal
 from typing import Any, Callable
 
-from agents import get_quaternary_sender, get_ssr_receiver
+from game.boolean import (
+    get_quaternary_sender,
+    get_ssr_receiver,
+    get_sender,
+    get_receiver_sender,
+    get_quaternary_receiver,
+)
+
 
 class SignalTree(Sequential):
     """Signaling network for learning functions from lists of states (e.g., truth values of propositions) to states (e.g., the truth value of a complex proposition).
@@ -65,7 +74,54 @@ class SignalTree(Sequential):
         )
 
 
-# define baseline SSR net
+##############################################################################
+# Component agents
+##############################################################################
+
+
+class InputSender(AttentionSignaler):
+    def __init__(self, input_size: int) -> None:
+        super().__init__(
+            attention_layer=AttentionAgent(input_size),
+            signaler=get_sender(),
+        )
+
+    def forward(self, x: list[State]) -> Signal:
+        # print("Input sender forward called.")
+        return super().forward(x)
+
+
+class HiddenSignaler(Sequential):
+    """The basic building block of 'hidden' layers of a signaling network, consisting of a Compressor unit to get a composite (binary, e.g. "00") signal from the previous layer as input, and a ReceiverSender to send a simple (unary, e.g. "0") signal as output."""
+
+    def __init__(self, input_size: int) -> None:
+        self.input_size = input_size
+        self.compressor = Compressor(input_size)
+        self.receiver_sender = get_receiver_sender()
+        super().__init__(layers=[self.compressor, self.receiver_sender])
+
+    def forward(self, x) -> Any:
+        # print("hidden signaler forward called")
+        return super().forward(x)
+
+
+class OutputReceiver(Sequential):
+
+    """The final output agent for a signaling network is a module with a compressor unit to combine two signals, and a receiver to map this composite signal into an act."""
+
+    def __init__(self, input_size: int = 2) -> None:
+        """By default input size is 2 for this 'root node' of a binary tree shaped network."""
+        self.input_size = input_size
+        self.compressor = Compressor(input_size)
+        self.receiver = get_quaternary_receiver()
+        super().__init__(layers=[self.compressor, self.receiver])
+
+    def forward(self, x) -> Any:
+        # print("output receiver forward called.")
+        return super().forward(x)
+
+
+####
 
 
 def get_optimal_ssr() -> SignalTree:
@@ -90,14 +146,11 @@ def get_optimal_ssr() -> SignalTree:
     # sender_b.attention_layer.freeze()
     # receiver.compressor.freeze()
 
-
     sender_a = get_quaternary_sender()
     sender_b = get_quaternary_sender()
     sender_layer = Layer(agents=[sender_a, sender_b])
     receiver = get_ssr_receiver()
-    net = Sequential(
-        layers=[sender_layer, receiver]
-    )
+    net = Sequential(layers=[sender_layer, receiver])
 
     return net
 

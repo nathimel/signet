@@ -1,12 +1,20 @@
-from game import get_ssr_data
 import util
 import vis
 import sys
 import random
 import numpy as np
-from agents import Random, Top, Bottom
-from game import binary_data, n_ary_data, AND, OR, XOR, NAND, IMPLIES, IFF
-from languages import SignalingLanguage
+from agents.basic import Random, Top, Bottom
+from game.boolean import (
+    binary_data,
+    n_ary_data,
+    get_ssr_data,
+    AND,
+    OR,
+    XOR,
+    NAND,
+    IMPLIES,
+    IFF,
+)
 from network import SignalTree, empirical_accuracy, get_optimal_ssr
 from tqdm import tqdm
 
@@ -34,8 +42,8 @@ def main():
     # dataset = n_ary_data(n=input_size, connective=AND)
     dataset = get_ssr_data(f=XOR)
     for example in dataset:
-        for k,v in example.items():
-            print(k,v)
+        for k, v in example.items():
+            print(k, v)
 
     # initialize network and parameters
     # net = SignalTree(input_size=input_size, learning_rate=learning_rate)
@@ -73,9 +81,9 @@ def main():
     # Inspect languages for the optimal ssr net
     sender_layer, receiver = net.layers
     sender_a, sender_b = sender_layer.agents
-    sender_a = sender_a.signaler
-    sender_b = sender_b.signaler
-    receiver = receiver.receiver
+    # sender_a = sender_a.signaler
+    # sender_b = sender_b.signaler
+    # receiver = receiver.receiver
     languages = [
         sender_a.to_language(data={"name": "Sender A"}, threshold=0.5),
         sender_b.to_language(data={"name": "Sender B"}, threshold=0.5),
