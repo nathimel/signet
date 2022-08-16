@@ -4,7 +4,7 @@ import sys
 import random
 import numpy as np
 from agents.basic import Random, Top, Bottom
-from game.boolean import (
+from game.boolean.functional import (
     binary_data,
     n_ary_data,
     get_ssr_data,
@@ -15,9 +15,37 @@ from game.boolean import (
     IMPLIES,
     IFF,
 )
-from network import SignalTree, empirical_accuracy, get_optimal_ssr
+from game.boolean.signaltree import SignalTree, get_optimal_ssr
 from tqdm import tqdm
+from typing import Any
 
+
+def empirical_accuracy(
+    net: SignalTree,
+    dataset: list[dict[str, Any]],
+    num_rounds: int = None,
+) -> float:
+    """
+    Evaluate the accuracy of a signaling networks by computing the average accuracy on the dataset.
+
+    Args:
+        num_rounds: an int representing how many interactions to record.
+    """
+    net.test()
+
+    if num_rounds is None:
+        num_rounds = len(dataset)
+
+    num_correct = 0
+    for _ in range(num_rounds):
+        example = np.random.choice(dataset)
+        x = example["input"]
+        y = example["label"]
+        y_hat = net(x)
+        num_correct += 1 if y_hat == y else 0
+
+    net.train()
+    return num_correct / num_rounds
 
 def main():
     if len(sys.argv) != 2:

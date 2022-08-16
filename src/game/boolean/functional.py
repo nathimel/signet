@@ -1,4 +1,5 @@
 """Functions for data generating used for boolean games."""
+import numpy as np
 from languages import State
 from itertools import product
 from typing import Callable
@@ -170,3 +171,24 @@ def get_receiver_sender() -> ReceiverSender:
         receiver=get_quaternary_receiver(),
         sender=get_sender(),
     )
+
+def get_layer_sizes(input_size: int, topology: str = "binary-tree") -> list[int]:
+    """Given an input size, construct a list containing the size of each layer of a network for mapping the input size to a singular output. By default constructs a binary tree graph topology.
+
+    Args:
+        input_size: the size of the input layer, corresponding to the length of a boolean formula in atoms, and the number of leaf nodes of the syntactic tree.
+
+        topology: the network topology to construct. For mapping arbitary input sizes to a singular output, the shape must be a bottleneck, but in principle it may have a very long 'neck'.
+    """
+    if topology == "binary-tree":
+
+        # create a list of the sizes of each hidden layer
+        layer_sizes = list(
+            reversed([2**j for j in range(0, int(np.ceil(np.log2(input_size))) + 1)])
+        )
+    else:
+        raise ValueError(
+            "Cannot support additional network topologies. Please construct a binary tree network."
+        )
+
+    return layer_sizes
