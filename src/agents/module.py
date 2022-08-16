@@ -15,30 +15,43 @@ class SignalingModule:
     """The basic building block of a signaling network. Every agent in the network should inherit from this class.
 
     Attributes:
-        parameters: a dict containing the learnable parameters for the agent.
-        history: a stack to represent the (most recent) policies taken by the agent.
+
+        history: a stack to represent the list of policies taken by an agent.
+
+        parameters: (optional) numpy array of weights for an agent.
+
+        learner: (optional) {"Roth-Erev", "Bush-Mosteller"} the kind of learning dynamics to implement. Default is "Roth-Erev".
+
+        learning_rate: (optional) a float determining speed of learning. If Roth-Erev learning, multiply rewards by this value. Bush-Mosteller rewards requires a learning_rate in the interval [0,1].
     """
 
     def __init__(
         self,
-        parameters: np.ndarray = None,
-        learner: str = "Roth-Erev",
-        learning_rate: float = 1.0,
-        name: str = None,
+        **kwargs,
     ) -> None:
         """The base constructor for a signaling module used to build signaling networks.
-
-        Args:
-            parameters: optional numpy array of weights for an agent.
-
-            learner: {"Roth-Erev", "Bush-Mosteller"} the kind of learning dynamics to implement. Default is "Roth-Erev".
-
-            learning_rate: a float determining speed of learning. If Roth-Erev learning, multiply rewards by this value. Bush-Mosteller rewards requires a learning_rate in the interval [0,1].
         """
-        self.history = []
+
+        parameters = None
+        learner = "Roth-Erev"
+        learning_rate = 1.0
+        name = None
+        if "parameters" in kwargs:
+            parameters = kwargs["parameters"]
+
+        if "learner" in kwargs:
+            learner = kwargs["learner"]
+
+        if "learning_rate" in kwargs:
+            learning_rate = kwargs["learning_rate"]
+
+        if "name" in kwargs:
+            name = kwargs["name"]
+
+        self.name = name
         self.parameters = parameters
         self.learning_rate = learning_rate
-        self.name = name
+        self.history = []
 
         # In training mode or not / whether to update parameters
         self.train_mode = True
