@@ -589,3 +589,14 @@ def roth_erev_reinforce(
     """Increment the weight (accumulated rewards) of a policy specifed by `indices` by `amount`."""
     parameters[indices] += amount
     return parameters
+
+def win_stay_lose_shift_inertia(
+    parameters: np.ndarray,
+    indices: tuple[int],
+    amount: float,
+    **kwargs,
+)-> np.ndarray:
+    """Win-stay lose-shift learning with inertia.
+    
+    Requires a history to determine the number of losses, and to switch if greater than $i$, the inertia.
+    """
