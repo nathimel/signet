@@ -19,6 +19,7 @@ from tqdm import tqdm
 from typing import Any
 
 from sklearn.neural_network import MLPClassifier
+from sklearn.naive_bayes import BernoulliNB
 
 
 def empirical_accuracy(
@@ -115,6 +116,11 @@ def main():
     print("NN mean accuracy: ", score)
     vis.plot_accuracy(fn="outputs/dev/nn_loss.png", accuracies=mlp.loss_curve_)
 
+    # Naive bayes
+    bnb = BernoulliNB()
+    bnb.fit(X, y)
+    score = bnb.score(X, y)
+    print("NB mean accuracy: ", score)
 
 if __name__ == "__main__":
     main()
