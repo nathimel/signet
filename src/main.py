@@ -20,7 +20,7 @@ from typing import Any
 
 from sklearn.neural_network import MLPClassifier
 from sklearn.naive_bayes import BernoulliNB
-
+from sklearn.neighbors import KNeighborsClassifier
 
 def empirical_accuracy(
     net: SignalTree,
@@ -121,6 +121,11 @@ def main():
     bnb.fit(X, y)
     score = bnb.score(X, y)
     print("NB mean accuracy: ", score)
+
+    knn = KNeighborsClassifier(n_neighbors=2)
+    knn.fit(np.concatenate([X, X]), np.concatenate([y, y]))
+    score = knn.score(X, y)
+    print("KNN mean accuracy: ", score)
 
 if __name__ == "__main__":
     main()
