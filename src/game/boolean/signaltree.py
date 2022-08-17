@@ -1,7 +1,6 @@
 import random
 import numpy as np
 from agents.module import (
-    SignalingModule,
     Layer,
     Sequential,
 )
@@ -11,7 +10,7 @@ from agents.basic import (
     Compressor,
 )
 from languages import State, Signal
-from typing import Any, Callable
+from typing import Any
 
 from game.boolean.functional import (
     get_quaternary_sender,
