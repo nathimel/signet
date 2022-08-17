@@ -2,13 +2,10 @@ from game.glass.glasses import GlassTree
 import util
 import vis
 import sys
-import random
 import numpy as np
 from agents.basic import Random, Top, Bottom
 from game.boolean.functional import (
-    binary_data,
     n_ary_data,
-    get_ssr_data,
     AND,
     OR,
     XOR,
@@ -16,7 +13,8 @@ from game.boolean.functional import (
     IMPLIES,
     IFF,
 )
-from game.boolean.signaltree import SignalTree, get_optimal_ssr
+from game.boolean.signaltree import SignalTree
+from languages import Signal, State
 from tqdm import tqdm
 from typing import Any
 
@@ -48,6 +46,10 @@ def empirical_accuracy(
     net.train()
     return num_correct / num_rounds
 
+
+criterion = lambda prediction, label: int(prediction == label)
+
+
 def main():
     if len(sys.argv) != 2:
         print("Usage: python3 src/main.py path_to_config_file")
@@ -62,25 +64,21 @@ def main():
     learning_rate = configs["learning_rate"]
     random_seed = configs["random_seed"]
     save_accuracy_plot = configs["file_paths"]["save_accuracy_plot"]
-    save_languages_fn = configs["file_paths"]["save_languages"]
 
     util.set_seed(random_seed)
 
-    # define learning problem
-    # dataset = binary_data()
-    dataset = n_ary_data(n=3, connective=XOR)
-    # dataset = get_ssr_data(f=XOR)
-    # for example in dataset:
-    #     for k, v in example.items():
-    #         print(k, v)
+    dataset = n_ary_data(
+        n=input_size,
+        connective=XOR,
+        input_type=Signal,  # we assume inputs are already signals
+        output_type=State,  # and that outputs are acts (states)
+    )
 
     # initialize network and parameters
-    # net = SignalTree(input_size=input_size, learning_rate=learning_rate)
-    # net = get_optimal_ssr()
-    # net = Random()
-    # net = Bottom()
-    # net = Top()
-    # net = GlassTree()
+    net = SignalTree(
+        input_size=input_size,
+        learning_rate=learning_rate,
+    )
 
     accuracy = []
     # main training loop
@@ -88,16 +86,10 @@ def main():
         example = np.random.choice(dataset)
 
         x = example["input"]
-
-        # print("VALUE of x: ", x)
-        # x = list(example["input"])  # copy and shuffle order
-        # random.shuffle(x)
-
         y = example["label"]
         y_hat = net(x)
 
-        # print(f"train mode set to {net.train_mode}")
-        net.update(reward_amount=int(y == y_hat))
+        net.update(reward_amount=criterion(y_hat, y))
 
         acc = empirical_accuracy(net, dataset, num_rounds=100)
         # record accuracy
@@ -108,20 +100,6 @@ def main():
 
     # # analysis
     vis.plot_accuracy(save_accuracy_plot, accuracy)
-
-    # # Inspect languages for the optimal ssr net
-    # sender_layer, receiver = net.layers
-    # sender_a, sender_b = sender_layer.agents
-    # # sender_a = sender_a.signaler
-    # # sender_b = sender_b.signaler
-    # # receiver = receiver.receiver
-    # languages = [
-    #     sender_a.to_language(data={"name": "Sender A"}, threshold=0.5),
-    #     sender_b.to_language(data={"name": "Sender B"}, threshold=0.5),
-    #     receiver.to_language(data={"name": "Receiver"}, threshold=0.5),
-    # ]
-
-    # util.save_languages(fn=save_languages_fn, languages=languages)
 
 
 if __name__ == "__main__":

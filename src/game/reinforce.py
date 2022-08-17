@@ -2,6 +2,7 @@
 
 import numpy as np
 
+
 def bush_mosteller_reinforce(
     parameters: np.ndarray, indices: tuple[int], amount: float, **kwargs
 ) -> np.ndarray:
@@ -41,6 +42,7 @@ def bush_mosteller_reinforce(
 
     return parameters
 
+
 def roth_erev_reinforce(
     parameters: np.ndarray,
     indices: tuple[int],
@@ -51,13 +53,14 @@ def roth_erev_reinforce(
     parameters[indices] += amount
     return parameters
 
+
 def win_stay_lose_shift_inertia(
     parameters: np.ndarray,
     indices: tuple[int],
     amount: float,
     **kwargs,
-)-> np.ndarray:
+) -> np.ndarray:
     """Win-stay lose-shift learning with inertia.
-    
+
     Requires a history to determine the number of losses, and to switch if greater than $i$, the inertia.
     """

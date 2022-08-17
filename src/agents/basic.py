@@ -16,24 +16,18 @@ from agents.module import (
 )
 
 from functools import reduce
-from typing import Any, Union
+from typing import Any, Iterable, Union
 
 
-# def compose_signals(signal_a: Signal, signal_b: Signal) -> Signal:
-    # return Signal(f"{signal_a.form}{signal_b.form}")
-
-# def compose_states(state_a: State, state_b: State) -> Signal:
-    # return State(f"{state_a.name}{state_b.name}")
-
-def compose(*x: list[Union[State, Signal]]) -> Union[State, Signal]:
-    # just two states for now:
-    """Map a pair of states or signals to their composition."""
-    a, b = x
-    if isinstance(a, State):
-        return State(name=f"{a.name}{b.name}")
-    if isinstance(b, Signal):
-        return Signal(form=f"{a.form}{b.form}", meaning=BooleanStateSpace().referents)
-
+def compose(*x: Iterable[Union[State, Signal]]) -> Union[State, Signal]:
+    """Map a list of states or signals to their composition."""
+    if all(isinstance(item, State) for item in x):
+        return State(name=f"{''.join([item.name for item in x])}")
+    if all(isinstance(item, Signal) for item in x):
+        return Signal(
+            form=f"{''.join([item.form for item in x])}",
+            meaning=BooleanStateSpace().referents,
+        )
 
 
 ##############################################################################
@@ -133,32 +127,7 @@ class ReceiverModule(SignalingModule):
         return self.receiver.to_language(**kwargs)
 
 
-# sanity check
-class SSRReceiver(ReceiverModule):
-    def forward(self, x: list[Signal]) -> State:
-        return super().forward(x=compose(*x))
-
-
 """Composite modules only need to store their sub-agents, and call the forward and reward api of these sub-agents. These agents are assumed to be already instantiated, which means that their required and optional parameters should have been set, and now their internal parameters shouldn't be touched."""
-
-
-class ReceiverSender(Sequential):
-    def __init__(
-        self,
-        receiver: ReceiverModule,
-        sender: SenderModule,
-        name: str = None,
-    ):
-        """Construct a ReceiverSender by passing in a pair of languages.
-
-        Args:
-
-        """
-        # initalize sub-agents
-        self.receiver = receiver
-        self.sender = sender
-        self.name = name
-        super().__init__(layers=[self.receiver, self.sender])
 
 
 class AttentionAgent(SignalingModule):
@@ -170,9 +139,6 @@ class AttentionAgent(SignalingModule):
         super().__init__(parameters=np.ones(self.input_size))
 
     def forward(self, x: list[Any]) -> Any:
-        # if not self.train_mode:
-        # print("in test mode and sampling input with history: ")
-        # print(self.history)
         return self.sample_input(x)
 
     def sample_input(self, x: list[Any]) -> Any:
@@ -188,7 +154,6 @@ class AttentionAgent(SignalingModule):
                 f"The length of history before pushing a policy should be empty. Check that update() was called. The value of history: {self.history}"
             )
         if self.train_mode:
-            # print("pushing a policy")
             self.history.append({"index": index})
 
         return output
@@ -198,9 +163,79 @@ class AttentionAgent(SignalingModule):
         return tuple([policy["index"]])
 
     def to_language(self, **kwargs) -> SignalingLanguage:
-        """An attention agent is not communicative."""
-        # yet
-        return None
+        """Dummy function for now since attention is not communicative."""
+        pass
+
+
+class Translator(SignalingModule):
+    """Maps a set of signals to a (possibly different sized) set of signals."""
+
+    def __init__(
+        self, source_signals: list[Signal], target_signals: list[Signal], **kwargs
+    ) -> None:
+
+        self.source_to_index = {
+            signal: index for index, signal in enumerate(source_signals)
+        }
+        self.target_to_index = {
+            signal: index for index, signal in enumerate(target_signals)
+        }
+        self.index_to_source_signal = tuple(source_signals)
+        self.index_to_target_signal = tuple(target_signals)
+        translation_weights = np.ones((len(source_signals), len(target_signals)))
+
+        kwargs["parameters"] = translation_weights
+        super().__init__(**kwargs)
+
+    def forward(self, x: Signal) -> Any:
+        signal = self.translate(x)
+        if self.train_mode:
+            self.history.append({"source": x, "target": signal})
+        return signal
+
+    def translate(self, source: Signal) -> Signal:
+        """Map a source signal to a target signal."""
+        index = self.sample_policy(index=self.source_to_index[source])
+        target = self.index_to_target_signal[index]
+        return target
+
+    def sample_policy(self, index: int) -> int:
+        """Sample a communicative policy by uniformly sampling from a row vector of the agent's weight matrix specified by the index.
+        
+        Args:
+            index: the integer index representing a row of the weight matrix.
+
+        Returns:
+            the integer index of the agent's choice
+        """
+        choices = self.parameters[index]
+        choices_normalized = choices / choices.sum()
+        return np.random.choice(
+            a=range(len(choices)),
+            p=choices_normalized,
+        )
+
+    def policy_to_indices(self, policy: dict[str, State]) -> tuple[int]:
+        """Maps a pair of (composite state, simple state) to numerical indices specifying the weight for updating this policy."""
+        return (
+            self.source_to_index[policy["source"]],
+            self.target_to_index[policy["target"]],
+        )
+
+
+class BooleanTranslator(Translator):
+    def __init__(self, **kwargs) -> None:
+        source_signals = [
+            Signal(form="00"),
+            Signal(form="01"),
+            Signal(form="10"),
+            Signal(form="11"),
+        ]
+        target_signals = [
+            Signal(form="0"),
+            Signal(form="1"),
+        ]
+        super().__init__(source_signals, target_signals, **kwargs)
 
 
 class AttentionSignaler(Sequential):
@@ -242,9 +277,6 @@ class Compressor(Sequential):
         super().__init__(layers=[self.attention_1, self.attention_2])
 
     def forward(self, x: list[Any]) -> Any:
-        # print("input to compressor forward: ", x)
-        # return compose_signals(
-        # return compose_states(
         return compose(
             self.attention_1(x),
             self.attention_2(x),

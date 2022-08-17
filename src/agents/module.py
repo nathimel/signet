@@ -29,12 +29,10 @@ class SignalingModule:
         self,
         **kwargs,
     ) -> None:
-        """The base constructor for a signaling module used to build signaling networks.
-        """
+        """The base constructor for a signaling module used to build signaling networks."""
 
         parameters = None
         learner = "Roth-Erev"
-        # learner = "Bush-Mosteller"
         learning_rate = 1.0
         name = None
         if "parameters" in kwargs:
