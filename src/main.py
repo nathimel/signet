@@ -57,7 +57,7 @@ def main():
     config_fn = sys.argv[1]
     configs = util.load_configs(config_fn)
 
-    num_rounds = configs["num_rounds"]
+    num_rounds = int(configs["num_rounds"])
     input_size = configs["input_size"]
     learning_rate = configs["learning_rate"]
     random_seed = configs["random_seed"]
@@ -79,7 +79,8 @@ def main():
     # net = get_optimal_ssr()
     # net = Random()
     # net = Bottom()
-    net = GlassTree()
+    # net = Top()
+    # net = GlassTree()
 
     accuracy = []
     # main training loop
@@ -100,7 +101,7 @@ def main():
 
         acc = empirical_accuracy(net, dataset, num_rounds=100)
         # record accuracy
-        if r % 10 == 0:
+        if r % 100 == 0:
             print(f"Accuracy on round {r}: {round(acc, 2)}")
 
         accuracy.append(acc)
