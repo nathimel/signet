@@ -1,12 +1,23 @@
-"""File for creating the default agents, languages, and other data structures used in for predicting the truth values of boolean sentences with signaling networks."""
-
+"""Functions for data generating used for boolean games."""
 import numpy as np
-
 from languages import State
 from itertools import product
-from typing import Any, Callable
+from typing import Callable
 from functools import reduce
 
+from agents.basic import (
+    Receiver,
+    ReceiverModule,
+    ReceiverSender,
+    SSRReceiver,
+    Sender,
+    SenderModule,
+)
+from languages import (
+    get_binary_language,
+    get_four_state_two_signal_language,
+    get_two_state_four_signal_language,
+)
 
 ##############################################################################
 # Data
@@ -118,3 +129,66 @@ def binary_data(
         }
         examples.append(example)
     return examples
+
+
+##############################################################################
+# Helper default functions
+#
+# for creating the agents typically used
+# in predicting the truth values of boolean sentences with signaling networks
+##############################################################################
+
+
+def get_sender() -> SenderModule:
+    """Get a 2 state, 2 signal SenderModule instance initialized for boolean games."""
+    return SenderModule(sender=Sender(language=get_binary_language()))
+
+
+def get_receiver() -> ReceiverModule:
+    """Get a ReceiverModule instance initialized for boolean games."""
+    return ReceiverModule(receiver=Receiver(language=get_binary_language()))
+
+
+def get_quaternary_receiver() -> ReceiverModule:
+    """Get a 4 signal, 2 state ReceiverModule instance initialized for boolean games."""
+    return ReceiverModule(
+        receiver=Receiver(language=get_two_state_four_signal_language())
+    )
+
+
+def get_ssr_receiver() -> SSRReceiver:
+    return SSRReceiver(receiver=Receiver(language=get_two_state_four_signal_language()))
+
+
+def get_quaternary_sender() -> ReceiverModule:
+    """Get a 4 state, 2 signal ReceiverModule instance initialized for boolean games."""
+    return SenderModule(sender=Sender(language=get_four_state_two_signal_language()))
+
+
+def get_receiver_sender() -> ReceiverSender:
+    """Get a ReceiverSender instance initialized for boolean games."""
+    return ReceiverSender(
+        receiver=get_quaternary_receiver(),
+        sender=get_sender(),
+    )
+
+def get_layer_sizes(input_size: int, topology: str = "binary-tree") -> list[int]:
+    """Given an input size, construct a list containing the size of each layer of a network for mapping the input size to a singular output. By default constructs a binary tree graph topology.
+
+    Args:
+        input_size: the size of the input layer, corresponding to the length of a boolean formula in atoms, and the number of leaf nodes of the syntactic tree.
+
+        topology: the network topology to construct. For mapping arbitary input sizes to a singular output, the shape must be a bottleneck, but in principle it may have a very long 'neck'.
+    """
+    if topology == "binary-tree":
+
+        # create a list of the sizes of each hidden layer
+        layer_sizes = list(
+            reversed([2**j for j in range(0, int(np.ceil(np.log2(input_size))) + 1)])
+        )
+    else:
+        raise ValueError(
+            "Cannot support additional network topologies. Please construct a binary tree network."
+        )
+
+    return layer_sizes
