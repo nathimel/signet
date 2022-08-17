@@ -1,6 +1,6 @@
 input_size: 2
-num_rounds: 1000
-learning_rate: 1.0
+num_rounds: 100000
+learning_rate: 0.5
 random_seed: 0
 file_paths:
   save_accuracy_plot: "outputs/dev/accuracy.png"

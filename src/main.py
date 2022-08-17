@@ -1,3 +1,4 @@
+from game.glass.glasses import GlassTree
 import util
 import vis
 import sys
@@ -67,17 +68,18 @@ def main():
 
     # define learning problem
     # dataset = binary_data()
-    # dataset = n_ary_data(n=input_size, connective=AND)
-    dataset = get_ssr_data(f=XOR)
-    for example in dataset:
-        for k, v in example.items():
-            print(k, v)
+    dataset = n_ary_data(n=3, connective=XOR)
+    # dataset = get_ssr_data(f=XOR)
+    # for example in dataset:
+    #     for k, v in example.items():
+    #         print(k, v)
 
     # initialize network and parameters
     # net = SignalTree(input_size=input_size, learning_rate=learning_rate)
-    net = get_optimal_ssr()
+    # net = get_optimal_ssr()
     # net = Random()
     # net = Bottom()
+    net = GlassTree()
 
     accuracy = []
     # main training loop
@@ -86,7 +88,7 @@ def main():
 
         x = example["input"]
 
-        print("VALUE of x: ", x)
+        # print("VALUE of x: ", x)
         # x = list(example["input"])  # copy and shuffle order
         # random.shuffle(x)
 
@@ -103,22 +105,22 @@ def main():
 
         accuracy.append(acc)
 
-    # analysis
+    # # analysis
     vis.plot_accuracy(save_accuracy_plot, accuracy)
 
-    # Inspect languages for the optimal ssr net
-    sender_layer, receiver = net.layers
-    sender_a, sender_b = sender_layer.agents
-    # sender_a = sender_a.signaler
-    # sender_b = sender_b.signaler
-    # receiver = receiver.receiver
-    languages = [
-        sender_a.to_language(data={"name": "Sender A"}, threshold=0.5),
-        sender_b.to_language(data={"name": "Sender B"}, threshold=0.5),
-        receiver.to_language(data={"name": "Receiver"}, threshold=0.5),
-    ]
+    # # Inspect languages for the optimal ssr net
+    # sender_layer, receiver = net.layers
+    # sender_a, sender_b = sender_layer.agents
+    # # sender_a = sender_a.signaler
+    # # sender_b = sender_b.signaler
+    # # receiver = receiver.receiver
+    # languages = [
+    #     sender_a.to_language(data={"name": "Sender A"}, threshold=0.5),
+    #     sender_b.to_language(data={"name": "Sender B"}, threshold=0.5),
+    #     receiver.to_language(data={"name": "Receiver"}, threshold=0.5),
+    # ]
 
-    util.save_languages(fn=save_languages_fn, languages=languages)
+    # util.save_languages(fn=save_languages_fn, languages=languages)
 
 
 if __name__ == "__main__":

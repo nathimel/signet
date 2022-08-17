@@ -34,6 +34,7 @@ class SignalingModule:
 
         parameters = None
         learner = "Roth-Erev"
+        # learner = "Bush-Mosteller"
         learning_rate = 1.0
         name = None
         if "parameters" in kwargs:

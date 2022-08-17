@@ -8,6 +8,7 @@ from languages import (
     SignalMeaning,
     SignalingLanguage,
     State,
+    BooleanStateSpace,
 )
 from agents.module import (
     SignalingModule,
@@ -18,8 +19,21 @@ from functools import reduce
 from typing import Any, Union
 
 
-def compose(signal_a: Signal, signal_b: Signal) -> Signal:
-    return Signal(f"{signal_a.form}{signal_b.form}")
+# def compose_signals(signal_a: Signal, signal_b: Signal) -> Signal:
+    # return Signal(f"{signal_a.form}{signal_b.form}")
+
+# def compose_states(state_a: State, state_b: State) -> Signal:
+    # return State(f"{state_a.name}{state_b.name}")
+
+def compose(*x: list[Union[State, Signal]]) -> Union[State, Signal]:
+    # just two states for now:
+    """Map a pair of states or signals to their composition."""
+    a, b = x
+    if isinstance(a, State):
+        return State(name=f"{a.name}{b.name}")
+    if isinstance(b, Signal):
+        return Signal(form=f"{a.form}{b.form}", meaning=BooleanStateSpace().referents)
+
 
 
 ##############################################################################
@@ -220,15 +234,17 @@ class Compressor(Sequential):
         """Construct a Compressor module.
 
         Args:
-            input_size: the number of incoming signals to compress to a single signal.
+            input_size: the number of incoming signals [states] to compress to a single signal [state].
         """
         self.input_size = input_size
         self.attention_1 = AttentionAgent(self.input_size)  # shape (input_size, 1)
         self.attention_2 = AttentionAgent(self.input_size)  # shape (input_size, 1)
         super().__init__(layers=[self.attention_1, self.attention_2])
 
-    def forward(self, x: list[Signal]) -> Signal:
+    def forward(self, x: list[Any]) -> Any:
         # print("input to compressor forward: ", x)
+        # return compose_signals(
+        # return compose_states(
         return compose(
             self.attention_1(x),
             self.attention_2(x),
