@@ -1,7 +1,7 @@
 """Functions for data generating used for boolean games."""
 import numpy as np
 from itertools import product
-from typing import Callable, Type, Union
+from typing import Any, Callable, Type, Union
 from functools import reduce
 
 from agents.basic import (
@@ -58,7 +58,23 @@ def n_ary_data(
     connective: Callable[[bool, bool], bool] = lambda x, y: x and y,
     input_type: Type = State,
     output_type: Type = State,
-):
+) -> list[dict[str, Any]]:
+    """Constructs a dataset for a sentence of propositional logic as positive (states, act) examples for a signaling network to learn from.
+
+    For now, we assume sentences to be iteratively composed of only one truth-connective.
+
+    Args:
+        n: the number of atomic propositions in the sentence
+
+        connective: the connective to iteratively build the sentence.
+
+        input_type: the types that the input list should consist of, either State or Signal
+
+        output_type the type that the output label should be, either State or Signal.
+
+    Returns:
+        a list of examples, each of the form {"input": (...), "label": (...)}
+    """
     f = lambda inputs: reduce(connective, inputs)
     examples = []
     assignments = list(
@@ -66,11 +82,46 @@ def n_ary_data(
     )  # get all possible combinations of truth values
     for inputs in assignments:
         example = {
-            "input": [bool_to_type(atom, input_type) for atom in inputs],  # a list of states
+            "input": [
+                bool_to_type(atom, input_type) for atom in inputs
+            ],  # a list of states
             "label": bool_to_type(f(inputs), output_type),  # a state
         }
         examples.append(example)
     return examples
+
+
+def numerical_data(
+    n: int,
+    connective: Callable[[bool, bool], bool] = lambda x, y: x and y,
+) -> tuple[np.ndarray]:
+    """
+    Constructs a dataset for a sentence of propositional logic as positive (states, act) examples for a signaling network to learn from.
+
+    For now, we assume sentences to be iteratively composed of only one truth-connective.
+
+    Args:
+        n: the number of atomic propositions in the sentence
+
+        connective: the connective to iteratively build the sentence.
+
+    Returns:
+        (X, y) a tuple of numpy arrays of floats representing the dataset to train a learner on.
+    """
+    X = []
+    y = []
+
+    f = lambda inputs: reduce(connective, inputs)
+    assignments = list(
+        product([False, True], repeat=n)
+    )  # get all possible combinations of truth values
+    for inputs in assignments:
+        x = np.array([float(item) for item in inputs])
+        label = float(f(inputs))
+        X.append(x)
+        y.append(label)
+
+    return (np.array(X), np.array(y))
 
 
 ##############################################################################

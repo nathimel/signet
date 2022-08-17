@@ -1,5 +1,5 @@
 input_size: 4
-num_rounds: 10000
+num_rounds: 100
 learning_rate: 0.5
 random_seed: 0
 file_paths:

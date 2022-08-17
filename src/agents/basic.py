@@ -201,7 +201,7 @@ class Translator(SignalingModule):
 
     def sample_policy(self, index: int) -> int:
         """Sample a communicative policy by uniformly sampling from a row vector of the agent's weight matrix specified by the index.
-        
+
         Args:
             index: the integer index representing a row of the weight matrix.
 
@@ -290,9 +290,6 @@ class Compressor(Sequential):
 
 class Baseline(SignalingModule):
     """Baseline module that does not learn."""
-
-    def update(self, reward_amount: float = 0) -> None:
-        pass
 
 
 class Bottom(Baseline):

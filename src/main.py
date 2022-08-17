@@ -1,4 +1,3 @@
-from game.glass.glasses import GlassTree
 import util
 import vis
 import sys
@@ -12,11 +11,14 @@ from game.boolean.functional import (
     NAND,
     IMPLIES,
     IFF,
+    numerical_data,
 )
 from game.boolean.signaltree import SignalTree
 from languages import Signal, State
 from tqdm import tqdm
 from typing import Any
+
+from sklearn.neural_network import MLPClassifier
 
 
 def empirical_accuracy(
@@ -101,6 +103,17 @@ def main():
 
     # # analysis
     vis.plot_accuracy(save_accuracy_plot, accuracy)
+
+
+    # NN comparison
+    X, y = numerical_data(n=input_size, connective=XOR)
+    num_epochs = int(num_rounds / len(dataset))
+    num_epochs = 100
+    mlp = MLPClassifier(hidden_layer_sizes=(45, ), max_iter=num_epochs)
+    mlp.fit(X, y)
+    score = mlp.score(X, y)
+    print("NN mean accuracy: ", score)
+    vis.plot_accuracy(fn="outputs/dev/nn_loss.png", accuracies=mlp.loss_curve_)
 
 
 if __name__ == "__main__":

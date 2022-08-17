@@ -39,13 +39,19 @@ class SignalTree(Sequential):
         self.num_hidden_layers = self.num_layers - 1
         self.hidden_layers = Sequential(
             layers=[
-                HiddenSignalingLayer(hidden_signalers=[
-                    HiddenSignaler( # each layer is a single agent...
-                        input_size = input_size + i)
-                        ]
-                )  for i in range(self.num_hidden_layers) ]
-            )
-        self.output_layer = OutputReceiver(input_size = input_size + len(self.hidden_layers.layers))
+                HiddenSignalingLayer(
+                    hidden_signalers=[
+                        HiddenSignaler(  # each layer is a single agent...
+                            input_size=input_size + i
+                        )
+                    ]
+                )
+                for i in range(self.num_hidden_layers)
+            ]
+        )
+        self.output_layer = OutputReceiver(
+            input_size=input_size + len(self.hidden_layers.layers)
+        )
         super().__init__(layers=[self.hidden_layers, self.output_layer])
         print("hidden layers: ")
         print([agent for layer in self.hidden_layers.layers for agent in layer.agents])
@@ -87,13 +93,15 @@ class HiddenSignaler(Sequential):
 
 
 class HiddenSignalingLayer(Layer):
-    """A Hidden signaling 'layer' returns the output of hidden signaler outputs appended to the list of signals input to the layer."""    
+    """A Hidden signaling 'layer' returns the output of hidden signaler outputs appended to the list of signals input to the layer."""
+
     def __init__(self, hidden_signalers: list[HiddenSignaler]) -> None:
-        super().__init__(agents = hidden_signalers)
-    
+        super().__init__(agents=hidden_signalers)
+
     def forward(self, x: list[Signal]) -> list[Signal]:
         signals = super().forward(x)
         return x + signals
+
 
 class OutputReceiver(Sequential):
     """The final output agent for a signaling network is a module with a compressor unit to combine two signals, and a receiver to map this composite signal into an act."""
