@@ -4,7 +4,7 @@ import numpy as np
 from functools import reduce
 from languages import SignalingLanguage
 from game.reinforce import roth_erev_reinforce, bush_mosteller_reinforce
-from typing import Any
+from typing import Any, Callable
 
 ##############################################################################
 # Signaling Network Modules
@@ -70,8 +70,7 @@ class SignalingModule:
             # normalize vectors to sum to 1.0
             if self.train_mode:
                 if self.parameters is not None:
-                    axis = self.parameters.ndim - 1
-                    self.parameters /= self.parameters.sum(axis=axis, keepdims=True)
+                    self.normalize_params()
 
         else:
             raise ValueError(
@@ -143,12 +142,27 @@ class SignalingModule:
         """Return the learned 'language', e.g. pairing of signals and states, for an agent, if they are a communicative agent."""
         raise NotImplementedError
 
+    # optimization and learning
+
+    def normalize_params(self) -> None:
+        """Normalize each row vector in parameters to sum to 1.0
+        """
+        axis = self.parameters.ndim - 1
+        self.parameters /= self.parameters.sum(axis=axis, keepdims=True)
+
+    def rescale_params(self, alpha: float = 20) -> None:
+        """Rescale the weights/parameters to have a maximum of `alpha`. """
+        self.normalize_params()
+        self.parameters *= alpha
 
 class Layer(SignalingModule):
     """A layer is a list of agents that can act as one composite agent."""
 
     def __init__(self, agents: list[SignalingModule]) -> None:
         self.agents = agents
+
+    # def apply_to_agents(self, f: Callable, x = None):
+    #     return [getattr(__o = agent, name = str(f))(x) for agent in self.agents]
 
     def forward(self, x) -> Any:
         return [agent(x) for agent in self.agents]
@@ -167,6 +181,9 @@ class Layer(SignalingModule):
 
     def unfreeze(self) -> None:
         [agent.unfreeze() for agent in self.agents]
+
+    def rescale_params(self, alpha: float = 20) -> None:
+        [agent.rescale_params(alpha) for agent in self.agents]
 
     def to_language(self, **kwargs) -> SignalingLanguage:
         return [agent.to_language(**kwargs) for agent in self.agents]
@@ -200,6 +217,9 @@ class Sequential(SignalingModule):
 
     def unfreeze(self) -> None:
         [layer.unfreeze() for layer in self.layers]
+
+    def rescale_params(self, alpha: float = 20) -> None:
+        [layer.rescale_params(alpha) for layer in self.layers]
 
     def to_language(self, **kwargs) -> SignalingLanguage:
         return [layer.to_language(**kwargs) for layer in self.layers]

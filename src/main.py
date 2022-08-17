@@ -18,10 +18,6 @@ from languages import Signal, State
 from tqdm import tqdm
 from typing import Any
 
-from sklearn.neural_network import MLPClassifier
-from sklearn.naive_bayes import BernoulliNB
-from sklearn.neighbors import KNeighborsClassifier
-
 def empirical_accuracy(
     net: SignalTree,
     dataset: list[dict[str, Any]],
@@ -100,32 +96,16 @@ def main():
         if r % 100 == 0:
             print(f"Accuracy on round {r}: {round(acc, 2)}")
 
+        if r % 1000 == 0:
+            # rescale params
+            # net.rescale_params(alpha=100)
+            pass
+
         accuracy.append(acc)
 
     # # analysis
     vis.plot_accuracy(save_accuracy_plot, accuracy)
 
-
-    # NN comparison
-    X, y = numerical_data(n=input_size, connective=XOR)
-    num_epochs = int(num_rounds / len(dataset))
-    num_epochs = 100
-    mlp = MLPClassifier(hidden_layer_sizes=(45, ), max_iter=num_epochs)
-    mlp.fit(X, y)
-    score = mlp.score(X, y)
-    print("NN mean accuracy: ", score)
-    vis.plot_accuracy(fn="outputs/dev/nn_loss.png", accuracies=mlp.loss_curve_)
-
-    # Naive bayes
-    bnb = BernoulliNB()
-    bnb.fit(X, y)
-    score = bnb.score(X, y)
-    print("NB mean accuracy: ", score)
-
-    knn = KNeighborsClassifier(n_neighbors=2)
-    knn.fit(np.concatenate([X, X]), np.concatenate([y, y]))
-    score = knn.score(X, y)
-    print("KNN mean accuracy: ", score)
 
 if __name__ == "__main__":
     main()
