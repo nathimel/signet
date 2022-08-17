@@ -1,5 +1,6 @@
 from agents.module import (
     Sequential,
+    Layer,
 )
 from agents.basic import (
     BooleanTranslator,
@@ -34,9 +35,20 @@ class SignalTree(Sequential):
             )
 
         # construct layers of tree network
-        self.layer_0 = HiddenSignaler(input_size)
-        self.layer_1 = OutputReceiver(input_size + 1)
-        super().__init__(layers=[self.layer_0, self.layer_1])
+        self.num_layers = input_size - 1
+        self.num_hidden_layers = self.num_layers - 1
+        self.hidden_layers = Sequential(
+            layers=[
+                HiddenSignalingLayer(hidden_signalers=[
+                    HiddenSignaler( # each layer is a single agent...
+                        input_size = input_size + i)
+                        ]
+                )  for i in range(self.num_hidden_layers) ]
+            )
+        self.output_layer = OutputReceiver(input_size = input_size + len(self.hidden_layers.layers))
+        super().__init__(layers=[self.hidden_layers, self.output_layer])
+        print("hidden layers: ")
+        print([agent for layer in self.hidden_layers.layers for agent in layer.agents])
 
     def forward(self, x: list[Signal]) -> Any:
         """A forward pass of the SignalTree.
@@ -46,9 +58,7 @@ class SignalTree(Sequential):
 
         Returns:
             a State (act) corresponding to the truth value of the complex sentence to learn."""
-        hidden_signal = self.layer_0(x)
-        act = self.layer_1(x + [hidden_signal])
-        return act
+        return super().forward(x)
 
 
 ##############################################################################
@@ -72,9 +82,20 @@ class HiddenSignaler(Sequential):
     def forward(self, x: list[Signal]) -> Any:
         return super().forward(x)
 
+    def __str__(self) -> str:
+        return f"HiddenSignaler of input size {self.input_size}"
+
+
+class HiddenSignalingLayer(Layer):
+    """A Hidden signaling 'layer' returns the output of hidden signaler outputs appended to the list of signals input to the layer."""    
+    def __init__(self, hidden_signalers: list[HiddenSignaler]) -> None:
+        super().__init__(agents = hidden_signalers)
+    
+    def forward(self, x: list[Signal]) -> list[Signal]:
+        signals = super().forward(x)
+        return x + signals
 
 class OutputReceiver(Sequential):
-
     """The final output agent for a signaling network is a module with a compressor unit to combine two signals, and a receiver to map this composite signal into an act."""
 
     def __init__(self, input_size: int) -> None:

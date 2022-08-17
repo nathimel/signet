@@ -67,6 +67,7 @@ def main():
 
     util.set_seed(random_seed)
 
+    # input_size = 3
     dataset = n_ary_data(
         n=input_size,
         connective=XOR,
