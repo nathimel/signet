@@ -32,8 +32,9 @@ class SignalingModule:
         """The base constructor for a signaling module used to build signaling networks."""
 
         parameters = None
-        learner = "Roth-Erev"
+        learner = "WSLSwI"
         learning_rate = 1.0
+        inertia = 1
         name = None
         if "parameters" in kwargs:
             parameters = kwargs["parameters"]
@@ -47,6 +48,9 @@ class SignalingModule:
         if "name" in kwargs:
             name = kwargs["name"]
 
+        if "inertia" in kwargs:
+            inertia = kwargs["inertia"]
+
         self.name = name
         self.parameters = parameters
         self.learning_rate = learning_rate
@@ -57,6 +61,7 @@ class SignalingModule:
         self.frozen = False
 
         if learner == "Roth-Erev":
+            self.learner = learner
             # assign reward func
             self.reward_func = roth_erev_reinforce
         elif learner == "Bush-Mosteller":
@@ -65,6 +70,7 @@ class SignalingModule:
                 raise ValueError(
                     f"learning rate must be in [0,1] for Bush-Mosteller learning. Received: {learning_rate}."
                 )
+            self.learner = learner
             # assign reward func
             self.reward_func = bush_mosteller_reinforce
             # normalize vectors to sum to 1.0
@@ -72,6 +78,11 @@ class SignalingModule:
                 if self.parameters is not None:
                     self.normalize_params()
 
+        elif learner == "WSLSwI":
+            self.learner = learner
+            self.inertia = inertia
+            self.maps = None
+            self.map = None
         else:
             raise ValueError(
                 f"The argument `learner` must be either 'Roth-erev' or 'Bush-Mosteller'. Received: {learner}"
@@ -92,21 +103,35 @@ class SignalingModule:
     def forward(self, x) -> Any:
         raise NotImplementedError
 
-    def update(self, reward_amount: float) -> None:
-        """Perform a learning update on the module, by optionally rewarding based on the last policy taken, and clearing the policy history for the next forward pass."""
+    def update(
+        self,
+        reward_amount: float,
+    ) -> None:
+        """Perform a learning update on the module, by optionally rewarding based on the last policy taken, and clearing the policy history for the next forward pass.
+
+        Args:
+            reward_amount: the amount to update (scaled by learning rate, etc.) parameters by, if using reinforcement learning. If using Win Stay Lose Shift with Inertia, update parameters by incrementing losses if reward amount is 0.
+        """
         if self.train_mode:
-            self.reward(amount=self.learning_rate * reward_amount)
+            if self.learner == "WSLSwI":
+                # update via win stay lose shift with inertia
+                if not self.frozen:
+                    # adjust losses and shift if necessary
+                    self.stay_or_shift(bool(reward_amount))
+            else:
+                # reinforcement
+                self.reward(amount=self.learning_rate * reward_amount)
+
+    def wslswi_map(self, x) -> Any:
+        return self.map[x]["output"]
+
+    def stay_or_shift(self, success: bool = True) -> None:
+        """For now, the count is based on number of successes and failures, but we could generalize to a weighted score of success and failure, so that inertia represents a general threshold, instead of a minimum count of failures."""
+        raise NotImplementedError
 
     def reward(self, amount: float) -> None:
-
-        if len(self.history) != 1:
-            raise ValueError(
-                f"Length of history must be exactly 1 to extract a unique policy to reward. Received history: {self.history}"
-            )
-
-        policy = self.history.pop()
-        indices = self.policy_to_indices(policy)
         if not self.frozen:
+            indices = self.policy_to_indices(self.pop_policy())
             self.parameters = self.reward_func(
                 self.parameters, indices, amount, learning_rate=self.learning_rate
             )
@@ -114,6 +139,23 @@ class SignalingModule:
     def reset_history(self) -> None:
         """Call this function after every forward pass through a module, whether it was rewarded or not."""
         self.history = []
+
+    def pop_policy(self) -> tuple[int]:
+        """Pop the most recent policy off the history stack, and return the corresponding indices."""
+        if len(self.history) != 1:
+            raise Exception(
+                f"Length of history must be exactly 1 to extract a unique policy to reward. Received history: {self.history}"
+            )
+        policy = self.history.pop()
+        return policy
+
+    def push_policy(self, policy: dict[str, Any]) -> None:
+        """Push a policy resulting from the forward pass onto the history stack."""
+        if len(self.history) != 0:
+            raise Exception(
+                f"The length of history before pushing a policy should be empty. Check that update() was called. The value of history: {self.history}"
+            )
+        self.history.append(policy)
 
     @abstractmethod
     def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
@@ -145,17 +187,17 @@ class SignalingModule:
     # optimization and learning
 
     def normalize_params(self) -> None:
-        """Normalize each row vector in parameters to sum to 1.0
-        """
+        """Normalize each row vector in parameters to sum to 1.0"""
         axis = self.parameters.ndim - 1
         self.parameters /= self.parameters.sum(axis=axis, keepdims=True)
 
     def rescale_params(self, alpha: float = 20) -> None:
-        """Rescale the weights/parameters to have a maximum of `alpha`. """
+        """Rescale the weights/parameters to have a maximum of `alpha`."""
         self.normalize_params()
         self.parameters *= alpha
 
-class Layer(SignalingModule):
+
+class Layer:
     """A layer is a list of agents that can act as one composite agent."""
 
     def __init__(self, agents: list[SignalingModule]) -> None:
@@ -163,6 +205,9 @@ class Layer(SignalingModule):
 
     # def apply_to_agents(self, f: Callable, x = None):
     #     return [getattr(__o = agent, name = str(f))(x) for agent in self.agents]
+
+    def __call__(self, x: Any) -> Any:
+        return self.forward(x)
 
     def forward(self, x) -> Any:
         return [agent(x) for agent in self.agents]
@@ -189,12 +234,15 @@ class Layer(SignalingModule):
         return [agent.to_language(**kwargs) for agent in self.agents]
 
 
-class Sequential(SignalingModule):
+class Sequential:
     """Constructs a module consisting of the result of a list of layers applied to each other in order using `reduce`."""
 
     def __init__(self, layers: list[Layer]) -> None:
         """Take a list of layers of agents to compose."""
         self.layers = layers
+
+    def __call__(self, x: Any) -> Any:
+        return self.forward(x)
 
     def forward(self, x) -> Any:
         return reduce(

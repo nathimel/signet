@@ -118,5 +118,4 @@ class OutputReceiver(Sequential):
         super().__init__(layers=[self.compressor, self.receiver])
 
     def forward(self, x) -> Any:
-        # print("output receiver forward called.")
         return super().forward(x)

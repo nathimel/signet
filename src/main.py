@@ -18,6 +18,7 @@ from languages import Signal, State
 from tqdm import tqdm
 from typing import Any
 
+
 def empirical_accuracy(
     net: SignalTree,
     dataset: list[dict[str, Any]],
@@ -61,6 +62,8 @@ def main():
     num_rounds = int(configs["num_rounds"])
     input_size = configs["input_size"]
     learning_rate = configs["learning_rate"]
+    learner = configs["learner"]
+    inertia = configs["inertia"]
     random_seed = configs["random_seed"]
     save_accuracy_plot = configs["file_paths"]["save_accuracy_plot"]
 
@@ -78,6 +81,8 @@ def main():
     net = SignalTree(
         input_size=input_size,
         learning_rate=learning_rate,
+        leaner=learner,
+        inertia=inertia,
     )
 
     accuracy = []
@@ -95,11 +100,6 @@ def main():
         # record accuracy
         if r % 100 == 0:
             print(f"Accuracy on round {r}: {round(acc, 2)}")
-
-        if r % 1000 == 0:
-            # rescale params
-            # net.rescale_params(alpha=100)
-            pass
 
         accuracy.append(acc)
 

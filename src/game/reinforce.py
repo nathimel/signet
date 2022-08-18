@@ -1,5 +1,8 @@
 """Functions useful for training agents under simple reinforcement learning."""
 
+import copy
+import random
+from typing import Any
 import numpy as np
 
 
@@ -54,13 +57,52 @@ def roth_erev_reinforce(
     return parameters
 
 
-def win_stay_lose_shift_inertia(
-    parameters: np.ndarray,
-    indices: tuple[int],
-    amount: float,
-    **kwargs,
-) -> np.ndarray:
-    """Win-stay lose-shift learning with inertia.
+def construct_policy_maps(
+    inputs: list, outputs: list
+) -> dict[str, list[dict[str, Any]]]:
+    """Construct the space of possible policy maps for Win-Stay-Lose-Shift with Inertia.
 
-    Requires a history to determine the number of losses, and to switch if greater than $i$, the inertia.
+    Args:
+        inputs: a list of hashable inputs
+
+        ouputs: a list of hashable outputs
+
+    Returns:
+        a dict of the form {input1: [output1, output2, ...], ...}
     """
+    # the carteisan product constructs the space of possible maps
+    return {input_: [output for output in outputs] for input_ in inputs}
+
+
+def update_map(
+    maps: dict[Any, list[Any]],
+    current_map: dict[Any, dict[str, Any]] = None,
+    inertia: int = 1,
+) -> dict[Any, dict[str, Any]]:
+    """Shift from an unsuccesful map and update inertia counts appropriately."""
+    if current_map is None:
+        return {
+            input_: {"output": shift_policy(maps[input_]), "losses": 0}
+            for input_ in maps
+        }
+
+    new_map = {}
+    for input_ in maps:
+        output_dict = current_map[input_]
+        if output_dict["losses"] > inertia:
+            # shift
+            new_output = shift_policy(maps[input_], output_dict["output"])
+            new_map[input_] = {"output": new_output, "losses": 0}
+        else:
+            new_map[input_] = output_dict
+    return new_map
+
+
+def shift_policy(policies: list[Any], avoid: Any = None) -> dict[str, Any]:
+    """Shift from an unsuccessful policy to any new one at random."""
+    if avoid is not None:
+        candidates = copy.deepcopy(policies)
+        candidates.remove(avoid)
+    else:
+        candidates = policies
+    return random.choice(candidates)
