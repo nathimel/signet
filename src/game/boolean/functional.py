@@ -1,19 +1,18 @@
 """Functions for data generating used for boolean games."""
 import numpy as np
-from languages import State
 from itertools import product
-from typing import Callable
+from typing import Any, Callable, Type, Union
 from functools import reduce
 
 from agents.basic import (
     Receiver,
     ReceiverModule,
-    ReceiverSender,
-    SSRReceiver,
     Sender,
     SenderModule,
 )
 from languages import (
+    State,
+    Signal,
     get_binary_language,
     get_four_state_two_signal_language,
     get_two_state_four_signal_language,
@@ -50,52 +49,32 @@ def IFF(x: bool, y: bool) -> bool:
     return x == y
 
 
-# Utility functions
+def bool_to_type(x: bool, type: Type = State) -> Union[State, Signal]:
+    return type(str(int(x)))
 
 
-def bool_to_state(x: bool) -> State:
-    return State(str(int(x)))
+def n_ary_data(
+    n: int,
+    connective: Callable[[bool, bool], bool] = lambda x, y: x and y,
+    input_type: Type = State,
+    output_type: Type = State,
+) -> list[dict[str, Any]]:
+    """Constructs a dataset for a sentence of propositional logic as positive (states, act) examples for a signaling network to learn from.
 
-
-def generate_data(sentence: str = "p and q") -> list[dict[str, State]]:
-    """Given a boolean function, generate a dataset of positive examples to train agents on corresponding to the table representation of the function.
+    For now, we assume sentences to be iteratively composed of only one truth-connective.
 
     Args:
-        sentence: a string representing a formula of propositional logic to be parsed for constructing a truth-table.
+        n: the number of atomic propositions in the sentence
+
+        connective: the connective to iteratively build the sentence.
+
+        input_type: the types that the input list should consist of, either State or Signal
+
+        output_type the type that the output label should be, either State or Signal.
 
     Returns:
-        a list of dictionaries of form {"input": (list of states), "label": (state) } representing positive examples to train (reinforce) on.
+        a list of examples, each of the form {"input": (...), "label": (...)}
     """
-
-    # TODO: parse sentence and return the number of atoms, and a 'ground_truth' function that returns the truth-value of the sentence given an assignment of truth-values to the atoms.
-    length = None
-    f = None
-
-    examples = []
-    combinations = product([True, False] for _ in range(length))
-    for inputs in combinations:
-        example = {
-            "input": inputs,  # a list of states
-            "label": f(inputs),  # a state
-        }
-        examples.append(example)
-    return examples
-
-
-def get_ssr_data(
-    f: Callable[[bool, bool], bool] = lambda x, y: x and y
-) -> list[dict[str, State]]:
-    examples = []
-    for p, q in product([True, False], [True, False]):
-        example = {  # we join the states instead of passing a list
-            "input": State("".join([str(int(p)), str(int(q))])),
-            "label": State(str(int(f(p, q)))),
-        }
-        examples.append(example)
-    return examples
-
-
-def n_ary_data(n: int, connective: Callable[[bool, bool], bool] = lambda x, y: x and y):
     f = lambda inputs: reduce(connective, inputs)
     examples = []
     assignments = list(
@@ -103,32 +82,46 @@ def n_ary_data(n: int, connective: Callable[[bool, bool], bool] = lambda x, y: x
     )  # get all possible combinations of truth values
     for inputs in assignments:
         example = {
-            "input": [bool_to_state(atom) for atom in inputs],  # a list of states
-            "label": bool_to_state(f(inputs)),  # a state
+            "input": [
+                bool_to_type(atom, input_type) for atom in inputs
+            ],  # a list of states
+            "label": bool_to_type(f(inputs), output_type),  # a state
         }
         examples.append(example)
     return examples
 
 
-def binary_data(
-    f: Callable[[bool, bool], bool] = lambda x, y: x and y
-) -> list[dict[str, State]]:
-    """Given a boolean function, generate a dataset of positive examples to train agents on corresponding to the table representation of the function.
+def numerical_data(
+    n: int,
+    connective: Callable[[bool, bool], bool] = lambda x, y: x and y,
+) -> tuple[np.ndarray]:
+    """
+    Constructs a dataset for a sentence of propositional logic as positive (states, act) examples for a signaling network to learn from.
+
+    For now, we assume sentences to be iteratively composed of only one truth-connective.
 
     Args:
-        f: a boolean function
+        n: the number of atomic propositions in the sentence
+
+        connective: the connective to iteratively build the sentence.
 
     Returns:
-        a list of dictionaries of form {"state": ..., "act": ...} representing positive examples to train (reinforce) on.
+        (X, y) a tuple of numpy arrays of floats representing the dataset to train a learner on.
     """
-    examples = []
-    for p, q in product([True, False], [True, False]):
-        example = {
-            "input": [State(str(int(p))), State(str(int(q)))],
-            "label": State(str(int(f(p, q)))),
-        }
-        examples.append(example)
-    return examples
+    X = []
+    y = []
+
+    f = lambda inputs: reduce(connective, inputs)
+    assignments = list(
+        product([False, True], repeat=n)
+    )  # get all possible combinations of truth values
+    for inputs in assignments:
+        x = np.array([float(item) for item in inputs])
+        label = float(f(inputs))
+        X.append(x)
+        y.append(label)
+
+    return (np.array(X), np.array(y))
 
 
 ##############################################################################
@@ -156,21 +149,10 @@ def get_quaternary_receiver() -> ReceiverModule:
     )
 
 
-def get_ssr_receiver() -> SSRReceiver:
-    return SSRReceiver(receiver=Receiver(language=get_two_state_four_signal_language()))
-
-
 def get_quaternary_sender() -> ReceiverModule:
     """Get a 4 state, 2 signal ReceiverModule instance initialized for boolean games."""
     return SenderModule(sender=Sender(language=get_four_state_two_signal_language()))
 
-
-def get_receiver_sender() -> ReceiverSender:
-    """Get a ReceiverSender instance initialized for boolean games."""
-    return ReceiverSender(
-        receiver=get_quaternary_receiver(),
-        sender=get_sender(),
-    )
 
 def get_layer_sizes(input_size: int, topology: str = "binary-tree") -> list[int]:
     """Given an input size, construct a list containing the size of each layer of a network for mapping the input size to a singular output. By default constructs a binary tree graph topology.

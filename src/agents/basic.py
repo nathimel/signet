@@ -1,4 +1,5 @@
 import random
+from tkinter import E
 import numpy as np
 from abc import abstractmethod
 from altk.effcomm.agent import Speaker, Listener
@@ -8,6 +9,7 @@ from languages import (
     SignalMeaning,
     SignalingLanguage,
     State,
+    BooleanStateSpace,
 )
 from agents.module import (
     SignalingModule,
@@ -15,11 +17,19 @@ from agents.module import (
 )
 
 from functools import reduce
-from typing import Any, Union
+from typing import Any, Iterable, Union
+from game.reinforce import construct_policy_maps, update_map
 
 
-def compose(signal_a: Signal, signal_b: Signal) -> Signal:
-    return Signal(f"{signal_a.form}{signal_b.form}")
+def compose(*x: Iterable[Union[State, Signal]]) -> Union[State, Signal]:
+    """Map a list of states or signals to their composition."""
+    if all(isinstance(item, State) for item in x):
+        return State(name=f"{''.join([item.name for item in x])}")
+    if all(isinstance(item, Signal) for item in x):
+        return Signal(
+            form=f"{''.join([item.form for item in x])}",
+            meaning=BooleanStateSpace().referents,
+        )
 
 
 ##############################################################################
@@ -82,15 +92,39 @@ class Receiver(Listener):
 class SenderModule(SignalingModule):
     """Basic Sender wrapped in SignalingModule."""
 
-    def __init__(self, sender: Sender) -> None:
+    def __init__(self, sender: Sender, **kwargs) -> None:
         self.sender = sender
-        super().__init__(parameters=self.sender.weights)
+        kwargs["parameters"] = self.sender.weights
+
+        super().__init__(**kwargs)
+
+        self.maps = construct_policy_maps(
+            inputs=self.sender.language.universe.referents,
+            outputs=self.sender.language.expressions,
+        )
+        self.map = update_map(self.maps)
 
     def forward(self, x: State) -> Signal:
-        signal = self.sender.encode(x)
+        if self.learner == "WSLSwI":
+            signal = self.wslswi_map(x)
+        else:
+            signal = self.sender.encode(x)
         if self.train_mode:
-            self.history.append({"referent": x, "expression": signal})
+            self.push_policy({"referent": x, "expression": signal})
         return signal
+
+    def wslswi_map(self, x: State) -> Signal:
+        """Deterministically map a state to a signal if the map is not above WSlSwI inertia."""
+        super().wslswi_map(x)
+
+    def stay_or_shift(self, success: bool = True) -> None:
+        policy = self.pop_policy()
+        if not self.frozen:
+            # increment the number of losses
+            self.map[policy["referent"]]["losses"] += int(not success)
+            # update policy if necessary
+            if self.map[policy["referent"]]["losses"] > self.inertia:
+                self.map = update_map(self.maps, self.map, inertia=self.inertia)
 
     def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
         return self.sender.policy_to_indices(policy)
@@ -102,15 +136,39 @@ class SenderModule(SignalingModule):
 class ReceiverModule(SignalingModule):
     """Basic Receiver wrapped in SignalingModule."""
 
-    def __init__(self, receiver: Receiver) -> None:
+    def __init__(self, receiver: Receiver, **kwargs) -> None:
         self.receiver = receiver
-        super().__init__(parameters=self.receiver.weights)
+        kwargs["parameters"] = self.receiver.weights
+        super().__init__(**kwargs)
+
+        self.maps = construct_policy_maps(
+            inputs=self.receiver.language.expressions,
+            outputs=self.receiver.language.universe.referents,
+        )
+        self.map = update_map(self.maps)
 
     def forward(self, x: Signal) -> State:
-        state = self.receiver.decode(signal=x)
+        if self.learner == "WSLSwI":
+            state = self.wslswi_map(x)
+        else:
+            state = self.receiver.decode(signal=x)
         if self.train_mode:
-            self.history.append({"referent": state, "expression": x})
+            self.push_policy({"referent": state, "expression": x})
+
         return state
+
+    def wslswi_map(self, x: Signal) -> State:
+        """Deterministically map a state to a signal if the map is not above WSlSwI inertia."""
+        return super().wslswi_map(x)
+
+    def stay_or_shift(self, success: bool = True) -> None:
+        policy = self.pop_policy()
+        if not self.frozen:
+            # increment the number of losses
+            self.map[policy["expression"]]["losses"] += int(not success)
+            # update policy if necessary
+            if self.map[policy["expression"]]["losses"] > self.inertia:
+                self.map = update_map(self.maps, self.map, inertia=self.inertia)
 
     def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
         return self.receiver.policy_to_indices(policy)
@@ -119,32 +177,7 @@ class ReceiverModule(SignalingModule):
         return self.receiver.to_language(**kwargs)
 
 
-# sanity check
-class SSRReceiver(ReceiverModule):
-    def forward(self, x: list[Signal]) -> State:
-        return super().forward(x=compose(*x))
-
-
 """Composite modules only need to store their sub-agents, and call the forward and reward api of these sub-agents. These agents are assumed to be already instantiated, which means that their required and optional parameters should have been set, and now their internal parameters shouldn't be touched."""
-
-
-class ReceiverSender(Sequential):
-    def __init__(
-        self,
-        receiver: ReceiverModule,
-        sender: SenderModule,
-        name: str = None,
-    ):
-        """Construct a ReceiverSender by passing in a pair of languages.
-
-        Args:
-
-        """
-        # initalize sub-agents
-        self.receiver = receiver
-        self.sender = sender
-        self.name = name
-        super().__init__(layers=[self.receiver, self.sender])
 
 
 class AttentionAgent(SignalingModule):
@@ -155,38 +188,144 @@ class AttentionAgent(SignalingModule):
         self.input_size = input_size
         super().__init__(parameters=np.ones(self.input_size))
 
-    def forward(self, x: list[Any]) -> Any:
-        # if not self.train_mode:
-        # print("in test mode and sampling input with history: ")
-        # print(self.history)
-        return self.sample_input(x)
+        self.maps = construct_policy_maps(
+            inputs=[0],  # dummy
+            outputs=range(input_size),
+        )
+        self.map = update_map(self.maps)
 
-    def sample_input(self, x: list[Any]) -> Any:
+    def forward(self, x: list[Any]) -> Any:
+        if self.learner == "WSLSwI":
+            result = self.wslswi_map(x)
+        else:
+            result = self.sample_input(x)
+        if self.train_mode:
+            self.push_policy({"index": result["index"]})
+        return result["output"]
+
+    def sample_input(self, x: list[Any]) -> dict[str, Any]:
         # sample an index
         index = np.random.choice(
             a=range(self.input_size),
             p=self.parameters / self.parameters.sum(),
         )
         output = x[index]
+        return {"index": index, "output": output}
 
-        if len(self.history) != 0:
-            raise ValueError(
-                f"The length of history before pushing a policy should be empty. Check that update() was called. The value of history: {self.history}"
-            )
-        if self.train_mode:
-            # print("pushing a policy")
-            self.history.append({"index": index})
+    def wslswi_map(self, x) -> Any:
+        """Note that attention does not rely on the value of input, only the size."""
+        index = self.map[0]["output"]
+        output = x[index]
+        return {"index": index, "output": output}
 
-        return output
+    def stay_or_shift(self, success: bool = True) -> None:
+        policy = self.pop_policy()
+        if not self.frozen:
+            # increment the number of losses
+            self.map[0]["losses"] += int(not success) # recall attention does not depend on input, so we dummy index the input with 0
+            # update policy if necessary
+            if self.map[0]["losses"] > self.inertia:
+                self.map = update_map(self.maps, self.map, inertia=self.inertia)
 
     def policy_to_indices(self, policy: dict[str, Any]) -> tuple[int]:
         # a singleton tuple
         return tuple([policy["index"]])
 
     def to_language(self, **kwargs) -> SignalingLanguage:
-        """An attention agent is not communicative."""
-        # yet
-        return None
+        """Dummy function for now since attention is not communicative."""
+        pass
+
+
+class Translator(SignalingModule):
+    """Maps a set of signals to a (possibly different sized) set of signals."""
+
+    def __init__(
+        self, source_signals: list[Signal], target_signals: list[Signal], **kwargs
+    ) -> None:
+
+        self.source_to_index = {
+            signal: index for index, signal in enumerate(source_signals)
+        }
+        self.target_to_index = {
+            signal: index for index, signal in enumerate(target_signals)
+        }
+        self.index_to_source_signal = tuple(source_signals)
+        self.index_to_target_signal = tuple(target_signals)
+        translation_weights = np.ones((len(source_signals), len(target_signals)))
+
+        kwargs["parameters"] = translation_weights
+        super().__init__(**kwargs)
+
+        self.maps = construct_policy_maps(
+            inputs=source_signals,
+            outputs=target_signals,
+        )
+        self.map = update_map(self.maps)
+
+    def forward(self, x: Signal) -> Any:
+        if self.learner == "WSLSwI":
+            signal = self.wslswi_map(x)
+        else:
+            signal = self.translate(x)
+        if self.train_mode:
+            self.push_policy({"source": x, "target": signal})
+        return signal
+
+    def translate(self, source: Signal) -> Signal:
+        """Map a source signal to a target signal."""
+        index = self.sample_policy(index=self.source_to_index[source])
+        target = self.index_to_target_signal[index]
+        return target
+
+    def sample_policy(self, index: int) -> int:
+        """Sample a communicative policy by uniformly sampling from a row vector of the agent's weight matrix specified by the index.
+
+        Args:
+            index: the integer index representing a row of the weight matrix.
+
+        Returns:
+            the integer index of the agent's choice
+        """
+        choices = self.parameters[index]
+        choices_normalized = choices / choices.sum()
+        return np.random.choice(
+            a=range(len(choices)),
+            p=choices_normalized,
+        )
+
+    def wslswi_map(self, x: Signal) -> Signal:
+        return super().wslswi_map(x)
+
+    def stay_or_shift(self, success: bool = True) -> None:
+        policy = self.pop_policy()
+        if not self.frozen:
+            # increment the number of losses
+            self.map[policy["source"]]["losses"] += int(not success)
+            # update policy if necessary
+            if self.map[policy["source"]]["losses"] > self.inertia:
+                self.map = update_map(self.maps, self.map, inertia=self.inertia)
+
+    def policy_to_indices(self, policy: dict[str, State]) -> tuple[int]:
+        """Maps a pair of (composite state, simple state) to numerical indices specifying the weight for updating this policy."""
+        return (
+            self.source_to_index[policy["source"]],
+            self.target_to_index[policy["target"]],
+        )
+
+
+class BooleanTranslator(Translator):
+    def __init__(self, **kwargs) -> None:
+        source_signals = [
+            Signal(form="00"),
+            Signal(form="01"),
+            Signal(form="10"),
+            Signal(form="11"),
+        ]
+        target_signals = [
+            Signal(form="0"),
+            Signal(form="1"),
+        ]
+        super().__init__(source_signals, target_signals, **kwargs)
 
 
 class AttentionSignaler(Sequential):
@@ -220,19 +359,19 @@ class Compressor(Sequential):
         """Construct a Compressor module.
 
         Args:
-            input_size: the number of incoming signals to compress to a single signal.
+            input_size: the number of incoming signals [states] to compress to a single signal [state].
         """
         self.input_size = input_size
         self.attention_1 = AttentionAgent(self.input_size)  # shape (input_size, 1)
         self.attention_2 = AttentionAgent(self.input_size)  # shape (input_size, 1)
         super().__init__(layers=[self.attention_1, self.attention_2])
 
-    def forward(self, x: list[Signal]) -> Signal:
-        # print("input to compressor forward: ", x)
-        return compose(
+    def forward(self, x: list[Any]) -> Any:
+        composed = compose(
             self.attention_1(x),
             self.attention_2(x),
         )
+        return composed
 
 
 ##############################################################################
@@ -242,9 +381,6 @@ class Compressor(Sequential):
 
 class Baseline(SignalingModule):
     """Baseline module that does not learn."""
-
-    def update(self, reward_amount: float = 0) -> None:
-        pass
 
 
 class Bottom(Baseline):

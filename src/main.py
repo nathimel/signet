@@ -1,21 +1,20 @@
 import util
 import vis
 import sys
-import random
 import numpy as np
 from agents.basic import Random, Top, Bottom
 from game.boolean.functional import (
-    binary_data,
     n_ary_data,
-    get_ssr_data,
     AND,
     OR,
     XOR,
     NAND,
     IMPLIES,
     IFF,
+    numerical_data,
 )
-from game.boolean.signaltree import SignalTree, get_optimal_ssr
+from game.boolean.signaltree import SignalTree
+from languages import Signal, State
 from tqdm import tqdm
 from typing import Any
 
@@ -47,6 +46,10 @@ def empirical_accuracy(
     net.train()
     return num_correct / num_rounds
 
+
+criterion = lambda prediction, label: int(prediction == label)
+
+
 def main():
     if len(sys.argv) != 2:
         print("Usage: python3 src/main.py path_to_config_file")
@@ -56,28 +59,31 @@ def main():
     config_fn = sys.argv[1]
     configs = util.load_configs(config_fn)
 
-    num_rounds = configs["num_rounds"]
+    num_rounds = int(configs["num_rounds"])
     input_size = configs["input_size"]
     learning_rate = configs["learning_rate"]
+    learner = configs["learner"]
+    inertia = configs["inertia"]
     random_seed = configs["random_seed"]
     save_accuracy_plot = configs["file_paths"]["save_accuracy_plot"]
-    save_languages_fn = configs["file_paths"]["save_languages"]
 
     util.set_seed(random_seed)
 
-    # define learning problem
-    # dataset = binary_data()
-    # dataset = n_ary_data(n=input_size, connective=AND)
-    dataset = get_ssr_data(f=XOR)
-    for example in dataset:
-        for k, v in example.items():
-            print(k, v)
+    # input_size = 3
+    dataset = n_ary_data(
+        n=input_size,
+        connective=XOR,
+        input_type=Signal,  # we assume inputs are already signals
+        output_type=State,  # and that outputs are acts (states)
+    )
 
     # initialize network and parameters
-    # net = SignalTree(input_size=input_size, learning_rate=learning_rate)
-    net = get_optimal_ssr()
-    # net = Random()
-    # net = Bottom()
+    net = SignalTree(
+        input_size=input_size,
+        learning_rate=learning_rate,
+        leaner=learner,
+        inertia=inertia,
+    )
 
     accuracy = []
     # main training loop
@@ -85,40 +91,20 @@ def main():
         example = np.random.choice(dataset)
 
         x = example["input"]
-
-        print("VALUE of x: ", x)
-        # x = list(example["input"])  # copy and shuffle order
-        # random.shuffle(x)
-
         y = example["label"]
         y_hat = net(x)
 
-        # print(f"train mode set to {net.train_mode}")
-        net.update(reward_amount=int(y == y_hat))
+        net.update(reward_amount=criterion(y_hat, y))
 
         acc = empirical_accuracy(net, dataset, num_rounds=100)
         # record accuracy
-        if r % 10 == 0:
+        if r % 100 == 0:
             print(f"Accuracy on round {r}: {round(acc, 2)}")
 
         accuracy.append(acc)
 
-    # analysis
+    # # analysis
     vis.plot_accuracy(save_accuracy_plot, accuracy)
-
-    # Inspect languages for the optimal ssr net
-    sender_layer, receiver = net.layers
-    sender_a, sender_b = sender_layer.agents
-    # sender_a = sender_a.signaler
-    # sender_b = sender_b.signaler
-    # receiver = receiver.receiver
-    languages = [
-        sender_a.to_language(data={"name": "Sender A"}, threshold=0.5),
-        sender_b.to_language(data={"name": "Sender B"}, threshold=0.5),
-        receiver.to_language(data={"name": "Receiver"}, threshold=0.5),
-    ]
-
-    util.save_languages(fn=save_languages_fn, languages=languages)
 
 
 if __name__ == "__main__":

@@ -131,14 +131,17 @@ class SignalingLanguage(Language):
 ##############################################################################
 
 
+class BooleanStateSpace(StateSpace):
+    def __init__(self):
+        super().__init__(states=[State(name="0"), State(name="1")])
+
+
 def get_binary_language() -> SignalingLanguage:
     """Get a 2 state, 2 signal SignalingLanguage instance initialized for boolean games."""
 
-    states = [State(name="0"), State(name="1")]
-    universe = StateSpace(states)
-
+    universe = BooleanStateSpace()
     dummy_meaning = SignalMeaning(
-        states=states,
+        states=universe.referents,
         universe=universe,
     )
     signals = [
