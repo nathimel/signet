@@ -154,6 +154,17 @@ def get_quaternary_sender() -> ReceiverModule:
     return SenderModule(sender=Sender(language=get_four_state_two_signal_language()))
 
 
+<<<<<<< HEAD
+=======
+def get_receiver_sender() -> ReceiverSender:
+    """Get a ReceiverSender instance initialized for boolean games."""
+    return ReceiverSender(
+        receiver=get_quaternary_receiver(),
+        sender=get_sender(),
+    )
+
+
+>>>>>>> 7d0868e (run black)
 def get_layer_sizes(input_size: int, topology: str = "binary-tree") -> list[int]:
     """Given an input size, construct a list containing the size of each layer of a network for mapping the input size to a singular output. By default constructs a binary tree graph topology.
 
