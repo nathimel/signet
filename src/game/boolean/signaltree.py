@@ -1,3 +1,4 @@
+import numpy as np
 from agents.module import (
     Sequential,
     Layer,
