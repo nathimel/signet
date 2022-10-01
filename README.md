@@ -2,7 +2,7 @@
 
 ## Intro
 
-"Signaling networks of different kinds are the locus of information transmission and processing at all levels of biological and social organization. The study of information processing in signalign networks is a new direction for naturlistic epistemology." -- (Skyrms, 2010: p. 47)
+"Signaling networks of different kinds are the locus of information transmission and processing at all levels of biological and social organization. The study of information processing in signaling networks is a new direction for naturalistic epistemology." -- (Skyrms, 2010: p. 47)
 
 ## Summary
 
